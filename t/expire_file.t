@@ -12,7 +12,6 @@ if (-e '.fast') {
 }
 
 print "1..11\n";
-die unless $Memoize::VERSION == 0.60;
 
 ++$n; print "ok $n\n";
 

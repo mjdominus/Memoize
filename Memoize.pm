@@ -8,10 +8,10 @@
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize+@plover.com for a license.
 #
-# Version 0.61 beta $Revision: 1.17 $ $Date: 2000/10/24 04:33:49 $
+# Version 0.62 beta $Revision: 1.17 $ $Date: 2000/10/24 04:33:49 $
 
 package Memoize;
-$VERSION = '0.61';
+$VERSION = '0.62';
 
 # Compile-time constants
 sub SCALAR () { 0 } 
