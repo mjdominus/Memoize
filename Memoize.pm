@@ -8,10 +8,10 @@
 # same terms as Perl iteself.  If in doubt, write to mjd@pobox.com
 # for a license.
 #
-# Version 0.02 alpha $Revision: 1.2 $ $Date: 1998/02/04 22:04:03 $
+# Version 0.03 alpha $Revision: 1.2 $ $Date: 1998/02/04 22:04:03 $
 
 package Memoize;
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 =head1 NAME
 
@@ -198,7 +198,11 @@ Some day.
 
 Memoization is not a cure-all:
 
-=item Do not memoize a function whose behavior depends on program
+=over 4
+
+=item *
+
+Do not memoize a function whose behavior depends on program
 state other than its own arguments, such as global variables, the time
 of day, or file input.  These functions whill not produce correct
 results when memoized.  For a particularly easy example:
@@ -215,7 +219,9 @@ course, and the memoized version of this function will read STDIN once
 to get a string from the user, and it will return that same string
 every time you call it after that.
 
-=item Do not memoize a function with side effects.
+=item *
+
+Do not memoize a function with side effects.
 
 	sub f {
 	  my ($a, $b) = @_;
@@ -231,7 +237,9 @@ expect the first time you ask it to prnit the sum of 2 and 3, but
 subsequent calls will return the number 11 (the return value of
 C<print>) without actually printing anything.
 
-=item Do not memoize a function that returns a data structure that is
+=item *
+
+Do not memoize a function that returns a data structure that is
 modified by its caller.
 
 Consider these functions:  C<getusers> returns a list of users somehow,
@@ -261,13 +269,20 @@ this time the list has already had its head removed; C<main> will
 erroneously remove another element from it.  The list will get shorter
 and shorter every time you call C<main>.
 
+
+=back
+
 =head1 TO DO
 
 =over 4
 
-=item There should be an C<unmemoize> function.
+=item *
 
-=item We should extend the benchmarking module to allow
+There should be an C<unmemoize> function.
+
+=item *
+
+We should extend the benchmarking module to allow
 
 	timethis(main, MEMOIZED => [ suba, subb ])
 
@@ -284,12 +299,31 @@ large effect on the performance of C<main>.  But if there was a big
 difference, you would know that C<suba> or C<subb> was a good
 candidate for optimization if you needed to make C<main> go faster.
 
-=item There was some other stuff, but I forget.
+=item * 
 
-=item Maybe a tied-hash interface to the memo-table, which a hook to
+There was some other stuff, but I forget.
+
+=item * 
+
+Maybe a tied-hash interface to the memo-table, which a hook to
       automatically populate an entry if no value is there yet?
 
 =back
+
+=head1 AUTHOR
+
+=begin text
+Mark-Jason Dominus (C<mjd-perl-memoize@plover.com>), Plover Systems co.
+
+See the C<Memoize.pm> Page at http://www.plover.com/~mjd/perl/Memoize
+for news and upgrades.  
+=end text
+
+=begin html
+<p>Mark-Jason Dominus (<a href="mailto:mjd-perl-memoize@plover.com"><tt>mjd-perl-memoize@plover.com</tt></a>), Plover Systems co.</p>
+<p>See <a href="http://www.plover.com/~mjd/perl/Memoize/">The <tt>Memoize.pm</tt> Page</a> for news and upgrades.</p>
+
+=end html
 
 =cut
 
@@ -304,6 +338,7 @@ use Carp;
 use Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw(memoize);
+use strict;
 
 my %memotable;
 
@@ -312,13 +347,14 @@ sub memoize {
   my $options = shift || {};
   
   unless (defined($fn)) {
-    croak "Usage: memoize functionname|coderef {OPTIONS}\n";
+    croak "Usage: memoize 'functionname'|coderef {OPTIONS}";
   }
 
   my $uppack = caller;
   my $cref;			# Code reference to original function
+  my $name;
 
-  if (ref $fn eq CODE) {
+  if (ref $fn eq 'CODE') {
     $cref = $fn;
   } elsif (! ref $fn) {
     if ($fn =~ /::/) {
@@ -326,6 +362,7 @@ sub memoize {
     } else {
       $name = $uppack . '::' . $fn;
     }
+    no strict;
     $cref = *{$name}{CODE}; # Magic
   } else {
     croak "Usage: argument 1 to `memoize' must be a function name or reference.\n";
@@ -345,14 +382,16 @@ sub memoize {
     MEMOS => { },		# Memo table
   };
   
-  $install_name = $options{INSTALL} || $name;
+  my $install_name = $options->{INSTALL} || $name;
   if (defined $install_name) {
     $install_name = $uppack . '::' . $install_name
 	unless $install_name =~ /::/;
+    no strict;
+    local($) = 0;	       # ``Subroutine $install_name redefined at ...''
     *{$install_name} = $wrapper; # Install memoized version
   }
   
-  $cref;			# Return memoized version
+  $wrapper;			# Return memoized version
 }
 
 # This is the function that manages the memo tables.
@@ -364,11 +403,15 @@ sub _memoizer {
   # We should probably do this at memoize time instead of at call time
   unless (ref $normalizer) {
     unless ($normalizer =~ /::/) {
+      no strict;
       $normalizer = *{$info->{PACKAGE} . '::' . $normalizer}{CODE};
     }
   }
 
-  my $argstr = &{$normalizer}(@_);
+  my $argstr;
+  { no strict;
+    $argstr = &{$normalizer}(@_);
+  }
   if (exists $info->{MEMOS}{$argstr}) {
     return $info->{MEMOS}{$argstr};
   } 

@@ -3,3 +3,5 @@ demo.pl
 demo2.pl
 Makefile.PL
 MANIFEST
+t/correctness.t
+t/speed.t

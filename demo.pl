@@ -1,24 +1,18 @@
+#!/usr/bin/perl
 
 use Memoize;
 use Benchmark;
 
 $CALLS = 0;
-my $a = shift;
+my $a = shift || 20;
 
-memoize('fibo2');
-
-timethese(100, unmemoized => sub { &
-sub fibo1 {
+sub fibo {
   my ($n) = @_;
+  $CALLS++;  
   if ($n < 2) { return $n }
-  &fibo1($n-1) + &fibo1($n-2);
+  &fibo($n-1) + &fibo($n-2);
 }
 
-sub fibo2 {
-  my ($n) = @_;
-  $CALLS++;
-  &fibo2($n-1) + &fibo2($n-2);
-}
 
 $CALLS = 0;
 $start = time;
@@ -39,4 +33,8 @@ $after = &fibo($a);
 $elapsed3 = time - $start;
 $CALLS3 = $CALLS;
 
-print "($CALLS1, $elapsed1) => ($CALLS2, $elapsed2) => ($CALLS3, $elapsed3)\n";
+print <<EOM;
+Unmemoized:            $CALLS1 calls, $elapsed1 sec elapsed
+Memoized, first pass:  $CALLS2 calls, $elapsed2 sec elapsed
+Memoized, second pass: $CALLS3 calls, $elapsed3 sec elapsed
+EOM
