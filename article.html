@@ -129,14 +129,15 @@ the cache. When we compute
 <CODE>factorial($n)</CODE>, we'll store the result in <CODE>$cache[$n]</CODE>. Then when we need to see if we've computed <CODE>factorial($n)</CODE> previously, we'll just look to see if <CODE>$cache[$n]</CODE> is defined. The code is simple:
 
 <P>
-<PRE> 1        { my @cache;
+<PRE>
+ 1        { my @cache;
  2          sub factorial {
  3            my $n = shift;
  4            return $cache[$n] if defined $cache[$n];
  5
  6            my $result;
  7            if ($n == 0) { $result = 1 }
- 8            else         { $result $n * factorial($n-1) }
+ 8            else         { $result = $n * factorial($n-1) }
  9                    
 10            $cache[$n] = $result;
 11            return $result;

@@ -3,7 +3,13 @@
 use lib qw(. ..);
 use Memoize 0.52 qw(memoize unmemoize);
 use Fcntl;
-use Memoize::AnyDBM_File;
+eval {require Memoize::AnyDBM_File};
+if ($@) {
+  print "1..0\n";
+  exit 0;
+}
+
+
 
 print "1..4\n";
 
@@ -23,11 +29,12 @@ sub n {
   $_[0]+1;
 }
 
-$tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
 if (eval {require File::Spec::Functions}) {
- File::Spec::Functions->import();
+  File::Spec::Functions->import('tmpdir', 'catfile');
+  $tmpdir = tmpdir();
 } else {
   *catfile = sub { join '/', @_ };
+  $tmpdir = $ENV{TMP} || $ENV{TMPDIR} || '/tmp';
 }
 $file = catfile($tmpdir, "md$$");
 @files = ($file, "$file.db", "$file.dir", "$file.pag");
