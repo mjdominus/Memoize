@@ -1,7 +1,7 @@
 package Memoize::AnyDBM_File;
 
 use vars qw(@ISA);
-@ISA = qw(Memoize::NDBM_File DB_File GDBM_File Memoize::SDBM_File ODBM_File) unless @ISA;
+@ISA = qw(DB_File GDBM_File Memoize::NDBM_File Memoize::SDBM_File ODBM_File) unless @ISA;
 
 my $verbose = 1;
 

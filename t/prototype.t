@@ -3,10 +3,9 @@
 use lib '..';
 use Memoize;
 $EXPECTED_WARNING = '(no warning expected)';
-print STDERR "$Memoize::Version";
 
 
-print "1..3\n";
+print "1..4\n";
 
 sub q1 ($) { $_[0] + 1 }
 sub q2 ()  { time }
@@ -26,6 +25,12 @@ $RES = 'ok';
 memoize 'q3';
 print "$RES 3\n";
 
+# Let's see if the prototype is actually honored
+@q = (1..5);
+$r = q1(@q); 
+print (($r == 6) ? '' : 'not ', "ok 4\n");
+
 sub handle_warnings {
+  print $_[0];
   $RES = 'not ok' unless $_[0] eq $EXPECTED_WARNING;
 }

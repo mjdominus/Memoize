@@ -28,7 +28,9 @@ if ($@) {
 
 print "1..4\n";
 
-$file = '/tmp/ms.db';
+use File::Spec::Functions;
+$tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
+$file = catfile($tmpdir, "md$$");
 unlink $file, "$file.dir", "$file.pag";
 tryout('GDBM_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";

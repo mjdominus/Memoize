@@ -28,7 +28,9 @@ if ($@) {
 
 print "1..4\n";
 
-$file = '/tmp/storable.db';
+use File::Spec::Functions;
+$tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
+$file = catfile($tmpdir, "storable$$");
 unlink $file;
 tryout('Memoize::Storable', $file, 1);  # Test 1..4
 unlink $file;

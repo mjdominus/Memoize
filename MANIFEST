@@ -1,5 +1,4 @@
 README
-WHATSNEW
 MANIFEST
 Memoize.pm
 Makefile.PL
@@ -7,6 +6,8 @@ Memoize/SDBM_File.pm
 Memoize/NDBM_File.pm
 Memoize/AnyDBM_File.pm
 Memoize/Storable.pm
+Memoize/Expire.pm
+Memoize/ExpireTest.pm
 t/correctness.t
 t/prototype.t
 t/array.t
@@ -20,6 +21,9 @@ t/tie_gdbm.t
 t/tie_sdbm.t
 t/tie_ndbm.t
 t/tie_storable.t
+t/expire.t
+t/expire_module_n.t
+t/expire_module_t.t
 demo.pl
 demo2.pl
 TODO

@@ -3,15 +3,15 @@
 #
 # Transparent memoization of idempotent functions
 #
-# Copyright 1998 M-J. Dominus.
+# Copyright 1998, 1999 M-J. Dominus.
 # You may copy and distribute this program under the
 # same terms as Perl itself.  If in doubt, 
-# write to mjd-perl-memoize@plover.com for a license.
+# write to mjd-perl-memoize+@plover.com for a license.
 #
-# Version 0.48 beta $Revision: 1.13 $ $Date: 1999/01/15 20:04:34 $
+# Version 0.49 beta $Revision: 1.13 $ $Date: 1999/01/15 20:04:34 $
 
 package Memoize;
-$VERSION = '0.48';
+$VERSION = '0.49';
 
 
 
@@ -34,6 +34,11 @@ my %revmemotable;
 my ($SCALAR, $LIST) = (0, 1);	# Constants
 my @CONTEXT_TAGS = qw(MERGE TIE MEMORY FAULT);
 my %IS_CACHE_TAG = map {($_ => 1)} @CONTEXT_TAGS;
+
+# Raise an error if the user tries to specify one of thesepackage as a
+# tie for LIST_CACHE
+
+my %scalar_only = map {($_ => 1)} qw(DB_File GDBM_File SDBM_File ODBM_File NDBM_File);
 
 sub memoize {
   my $fn = shift;
@@ -165,6 +170,9 @@ sub _my_tie {
   my @args = ref $fullopt ? @$fullopt : ();
   shift @args;
   my $module = shift @args;
+  if ($context eq 'LIST_CACHE' && $scalar_only{$module}) {
+    croak("You can't use $module for LIST_CACHE because it can only store scalars");
+  }
   my $modulefile = $module . '.pm';
   $modulefile =~ s{::}{/}g;
   eval { require $modulefile };
@@ -185,6 +193,7 @@ sub _my_tie {
   }
   1;
 }
+
 
 # This is the function that manages the memo tables.
 sub _memoizer {
@@ -339,14 +348,35 @@ Memoize - Make your functions faster by trading space for time
 
 =head1 SYNOPSIS
 
- use Memoize;
- memoize('slow_function');
- slow_function(arguments);    # Is faster than it was before
+	use Memoize;
+	memoize('slow_function');
+	slow_function(arguments);    # Is faster than it was before
+
+
+This is normally all you need to know.  However, many options are available:
+
+	memoize(function, options...);
+
+Options include:
+
+	NORMALIZER => function
+	INSTALL => new_name
+
+	SCALAR_CACHE => 'MEMORY'
+	SCALAR_CACHE => ['TIE', Module, arguments...]
+	SCALAR_CACHE => 'FAULT'
+	SCALAR_CACHE => 'MERGE'
+
+	LIST_CACHE => 'MEMORY'
+	LIST_CACHE => ['TIE', Module, arguments...]
+	LIST_CACHE => 'FAULT'
+	LIST_CACHE => 'MERGE'
+
 
 =head1 DESCRIPTION
 
 `Memoizing' a function makes it faster by trading space for time.  It
-does this by cacheing the return values of the function in a table.
+does this by caching the return values of the function in a table.
 If you call the function again with the same arguments, C<memoize>
 jmups in and gives you the value out of the table, instead of letting
 the function compute the value all over again.
@@ -679,15 +709,23 @@ return values under keys that begin with C<L:>.
 =head1 OTHER FUNCTION
 
 There's an C<unmemoize> function that you can import if you want to.
-If you use it, please let me know what it was good for, since I can
-only think of very limited uses for it and was considering leaving it
-out altogether.
+Why would you want to?  Here's an example: Suppose you have your cache
+tied to a DBM file, and you want to make sure that the cache is
+written out to disk if someone interrupts the program.  If the program
+exits normally, this will happen anyway, but if someone types
+control-C or something then the program will terminate immediately
+without syncronizing the database.  So what you can do instead is
 
-It accepts a reference to, or the name of a previously memoized
-function, and undoes whatever it did to provide the memoized version
-in the first place, including making the name refer to the unmemoized
-version if appropriate.  It returns a reference to the unmemoized
-version of the function.
+    $SIG{INT} = sub { unmemoize 'function' };
+
+
+Thanks to Jonathan Roy for discovering a use for C<unmemoize>.
+
+C<unmemoize> accepts a reference to, or the name of a previously
+memoized function, and undoes whatever it did to provide the memoized
+version in the first place, including making the name refer to the
+unmemoized version if appropriate.  It returns a reference to the
+unmemoized version of the function.
 
 If you ask it to unmemoize a function that was never memoized, it
 croaks.
@@ -791,7 +829,7 @@ cache table on disk in an C<SDBM_File> database:
 C<NDBM_File> has the same problem and the same solution.
 
 C<Storable> isn't a tied hash class at all.  You can use it to store a
-hash to disk and retrieve it again, but yu can't modify the hash while
+hash to disk and retrieve it again, but you can't modify the hash while
 it's on the disk.  So if you want to store your cache table in a
 C<Storable> database, use C<Memoize::Storable>, which puts a hashlike
 front-end onto C<Storable>.  The hash table is actually kept in
@@ -808,9 +846,16 @@ function (or when your program exits):
 Include the `nstore' option to have the C<Storable> database written
 in `network order'.  (See L<Storable> for more details about this.)
 
+=head1 EXPIRATION SUPPORT
+
+See Memoize::Expire, which is a plug-in module that adds expiration
+functionality to Memoize.  If you don't like the kinds of policies
+that Memoize::Expire implements, it is easy to write your own plug-in
+module to implement whatever policy you desire.
+
 =head1 MY BUGS
 
-Needs a better test suite, especially for the tied stuff.
+Needs a better test suite, especially for the tied and expiration stuff.
 
 Also, there is some problem with the way C<goto &f> works under
 threaded Perl, because of the lexical scoping of C<@_>.  This is a bug
@@ -824,7 +869,7 @@ I wish I could investigate this threaded Perl problem.  If someone
 could lend me an account on a machine with threaded Perl for a few
 hours, it would be very helpful.
 
-That is why the version number is 0.48 instead of 1.00.
+That is why the version number is 0.49 instead of 1.00.
 
 =head1 MAILING LIST
 
@@ -833,21 +878,36 @@ C<Memoize>, send an empty note to C<mjd-perl-memoize-request@plover.com>.
 
 =head1 AUTHOR
 
-=begin text
-Mark-Jason Dominus (C<mjd-perl-memoize@plover.com>), Plover Systems co.
+Mark-Jason Dominus (C<mjd-perl-memoize+@plover.com>), Plover Systems co.
 
-See the C<Memoize.pm> Page at http://www.plover.com/~mjd/perl/Memoize
-for news and upgrades.  
-=end text
-
-=begin html
-<p>Mark-Jason Dominus (<a href="mailto:mjd-perl-memoize@plover.com"><tt>mjd-perl-memoize@plover.com</tt></a>), Plover Systems co.</p>
-<p>See <a href="http://www.plover.com/~mjd/perl/Memoize/">The <tt>Memoize.pm</tt> Page</a> for news and upgrades.</p>
-
-=end html
+See the C<Memoize.pm> Page at http://www.plover.com/~mjd/perl/Memoize/
+for news and upgrades.  Near this page, at
+http://www.plover.com/~mjd/perl/MiniMemoize/ there is an article about
+memoization and about the internals of Memoize that appeared in The
+Perl Journal, issue #13.  (This article is also included in the
+Memoize distribution as `article.html'.)
 
 To join a mailing list for announcements about C<Memoize>, send an
-empty message to C<mjd-perl-memoize-request@plover.com>.
+empty message to C<mjd-perl-memoize-request@plover.com>.  This mailing
+list is for announcements only and has extremely low traffic---about
+four messages per year.
+
+=head1 THANK YOU
+
+Many thanks to Jonathan Roy for bug reports and suggestions, to
+Michael Schwern for other bug reports and patches, to Mike Cariaso for
+helping me to figure out the Right Thing to Do About Expiration, to
+Joshua Gerth, Joshua Chamas, Jonathan Roy, Mark D. Anderson, and
+Andrew Johnson for more suggestions about expiration, to Ariel
+Scolnikov for delightful messages about the Fibonacci function, to
+Dion Almaer for thought-provoking suggestions about the default
+normalizer, to Walt Mankowski and Kurt Starsinic for much help
+investigating problems under threaded Perl, to Alex Dudkevich for
+reporting the bug in prototyped functions and for checking my patch,
+to Tony Bass for many helpful suggestions, to Philippe Verdret for
+enlightening discussion of Hook::PrePostCall, to Nat Torkington for
+advice I ignored, to Chris Nandor for portability advice, and to Jenda
+Krynicky for being a light in the world.
 
 =cut
 

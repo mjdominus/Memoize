@@ -4,7 +4,7 @@ use lib '..';
 use Memoize;
 
 
-print "1..3\n";
+print "1..9\n";
 
 eval { memoize({}) };
 print "\$\@: `$@'\n";
@@ -18,3 +18,17 @@ eval { my $x; memoize(\$x) };
 print "\$\@: `$@'\n";
 print (($@ ? '' : 'not '), "ok 3\n");
 
+# 4--8
+$n = 3;
+for $mod (qw(DB_File GDBM_File SDBM_File ODBM_File NDBM_File)) {
+  eval { memoize(sub {}, LIST_CACHE => ['TIE', $mod]) };
+  print "\$\@: `$@'\n";
+  ++$n;
+  print (($@ ? '' : 'not '), "ok $n\n");
+}
+
+# 9
+eval { memoize(sub {}, LIST_CACHE => ['TIE', WuggaWugga]) };
+print "\$\@: `$@'\n";
+++$n;
+print (($@ ? '' : 'not '), "ok $n\n");

@@ -21,8 +21,18 @@ sub n {
   $_[0]+1;
 }
 
-$file = '/tmp/ms.db';
-unlink $file, "$file.dir", "$file.pag";
+use File::Spec::Functions;
+$tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
+$file = catfile($tmpdir, "md$$");
+@files = ($file, "$file.db", "$file.dir", "$file.pag");
+{ 
+  my @present = grep -e, @files;
+  if (@present && (@failed = grep { not unlink } @present)) {
+    warn "Can't unlink @failed!  ($!)";
+  }
+}
+
+
 tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";
 
@@ -58,3 +68,9 @@ sub tryout {
   unmemoize 'c23';
 }
 
+{ 
+  my @present = grep -e, @files;
+  if (@present && (@failed = grep { not unlink } @present)) {
+    warn "Can't unlink @failed!  ($!)";
+  }
+}

@@ -4,6 +4,15 @@
 
 =over 4
 
+=item * 
+
+LIST_CACHE doesn't work with ties to most DBM implementations, because
+Memouze tries to save a listref, and DB_File etc. can only store
+strings.  This should at least be documented.  Maybe Memoize could
+detect the problem at TIE time and throw a fatal error.
+
+Try out MLDBM here and document it if it works.
+
 =item *
 
 We should extend the benchmarking module to allow
@@ -50,7 +59,22 @@ Done!
 =item *
 
 Maybe an option for automatic expiration of cache values?  (`After one
-day,' `After five uses,' etc.)  
+day,' `After five uses,' etc.)  Also possibly an option to limit the
+number of active entries with automatic LRU expiration.
+
+You have a long note to Mike Cariaso that outlines a good approach
+that you sent on 9 April 1999.
+
+What's the timeout stuff going to look like?
+
+	EXPIRE_TIME => time_in_sec
+	EXPIRE_USES => num_uses
+	MAXENTRIES => n
+
+perhaps?  Is EXPIRE_USES actually useful?
+
+19990916: Memoize::Expire does EXPIRE_TIME and EXPIRE_USES.
+MAXENTRIES can come later as a separate module.
 
 =item *
 
@@ -178,20 +202,43 @@ problem.
 
 =item * 
 
-What's the timeout stuff going to look like?
-
-	EXPIRE_TIME => time_in_sec
-	EXPIRE_USES => num_uses
-	MAXENTRIES => n
-
-perhaps?  Is EXPIRE_USES actually useful?
-
-=item *
-
 Maybe if the original function has a prototype, the module can use
 that to select the most appropriate default normalizer.  For example,
 if the prototype was C<($)>, there's no reason to use `join'.  If it's
 C<(\@)> then it can use C<join $;,@$_[0];> instead of C<join $;,@_;>.
+
+=item *
+
+Ariel Scolnikov suggests using the change counting problem as an
+example.  (How many ways to make change of a dollar?)
+
+=item * 
+
+I found a use for `unmemoize'.  If you're using the Storable glue, and
+your program gets SIGINT, you find that the cache data is not in the
+cache, because Perl normally writes it all out at once from a
+DESTROY method, and signals skip DESTROY processing.  So you could add
+
+	$sig{INT} = sub { unmemoize ... };
+
+(Jonathan Roy pointed this out) 
+
+=item *
+
+This means it would be useful to have a method to return references to
+all the currently-memoized functions so that you could say
+
+	$sig{INT} = sub { for $f (Memoize->all_memoized) {
+	                    unmemoize $f;
+	                  }
+	                }
+
+
+=item *
+
+19990917 There should be a call you can make to get back the cache
+itself.  If there were, then you could delete stuff from it to
+manually expire data items.
 
 =item *
 
