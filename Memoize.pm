@@ -11,8 +11,11 @@
 # Version 0.52 beta $Revision: 1.14 $ $Date: 1999/09/17 14:55:57 $
 
 package Memoize;
-$VERSION = '0.52';
+$VERSION = '0.60';
 
+# Compile-time constants
+sub SCALAR () { 0 } 
+sub LIST () { 1 } 
 
 
 #
@@ -26,13 +29,12 @@ use Exporter;
 use vars qw($DEBUG);
 @ISA = qw(Exporter);
 @EXPORT = qw(memoize);
-@EXPORT_OK = qw(unmemoize);
+@EXPORT_OK = qw(unmemoize flush_cache);
 use strict;
 
 my %memotable;
 my %revmemotable;
-my ($SCALAR, $LIST) = (0, 1);	# Constants
-my @CONTEXT_TAGS = qw(MERGE TIE MEMORY FAULT);
+my @CONTEXT_TAGS = qw(MERGE TIE MEMORY FAULT HASH);
 my %IS_CACHE_TAG = map {($_ => 1)} @CONTEXT_TAGS;
 
 # Raise an error if the user tries to specify one of thesepackage as a
@@ -64,14 +66,22 @@ sub memoize {
 
   # Goto considered harmful!  Hee hee hee.  
   my $wrapper = eval "sub $proto { unshift \@_, qq{$cref}; goto &_memoizer; }";
+  # Actually I would like to get rid of the eval, but there seems not
+  # to be any other way to set the prototype properly.
+
 # --- THREADED PERL COMMENT ---
-# The above might not work under threaded perl because goto & semantics are
-# broken.  If that's the case, try the following:
+# The above line might not work under threaded perl because goto & 
+# semantics are broken.  If that's the case, try the following instead:
 #  my $wrapper = eval "sub { &_memoizer(qq{$cref}, \@_); }";
 # Confirmed 1998-12-27 this does work.
 # 1998-12-29: Sarathy says this bug is fixed in 5.005_54.
 # However, the module still fails, although the sample test program doesn't.
 
+  my $normalizer = $options{NORMALIZER};
+  if (defined $normalizer  && ! ref $normalizer) {
+    $normalizer = _make_cref($normalizer, $uppack);
+  }
+  
   my $install_name;
   if (defined $options->{INSTALL}) {
     # INSTALL => name
@@ -93,45 +103,46 @@ sub memoize {
 
   $revmemotable{$wrapper} = "" . $cref; # Turn code ref into hash key
 
-  # These will be the caches!
-  my $scalars = {};
-  my $lists = {};
+  # These will be the caches
+  my %caches;
+  for my $context (qw(SCALAR LIST)) {
+    # suppress subsequent 'uninitialized value' warnings
+    $options{"${context}_CACHE"} ||= ''; 
 
-  # Now deal with the TODISK options
+    my $cache_opt = $options{"${context}_CACHE"};
+    my @cache_opt_args;
+    if (ref $cache_opt) {
+      @cache_opt_args = @$cache_opt;
+      $cache_opt = shift @cache_opt_args;
+    }
+    if ($cache_opt eq 'FAULT') { # no cache
+      $caches{$context} = undef;
+    } elsif ($cache_opt eq 'HASH') { # user-supplied hash
+      $caches{$context} = $cache_opt_args[0];
+    } elsif ($cache_opt eq '' ||  $IS_CACHE_TAG{$cache_opt}) {
+      # default is that we make up an in-memory hash
+      $caches{$context} = {};
+      # (this might get tied later, or MERGEd away)
+    } else {
+      croak "Unrecognized option to `${context}_CACHE': `$cache_opt' should be one of (@CONTEXT_TAGS); aborting";
+    }
+  }
+
+  # Perhaps I should check here that you didn't supply *both* merge
+  # options.  But if you did, it does do something reasonable: They
+  # both get merged to the same in-memory hash.
+  if ($options{SCALAR_CACHE} eq 'MERGE') {
+    $caches{SCALAR} = $caches{LIST};
+  } elsif ($options{LIST_CACHE} eq 'MERGE') {
+    $caches{LIST} = $caches{SCALAR};
+  }
+
+  # Now deal with the TIE options
   {
     my $context;
-    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
-      my $tag = $options{$context};
-      next unless defined $tag;
-      unless (   ref $tag eq '' 
-	      || ref $tag eq 'ARRAY') {
-	croak "Argument of $context must be either string, or array ref; aborting";
-      }
-      $tag = (ref $tag eq 'ARRAY') ? $tag->[0] : $tag;
-      unless ($IS_CACHE_TAG{$tag}) {
-	croak "Unrecognized option to `$context': `$tag' should be one of (@CONTEXT_TAGS); aborting";
-      }
-    }
-
-    # Handle `MERGE'
-    {
-      local($^W) = 0;  # Shut up `uninitialized value' warnings
-      my ($so, $lo) = @options{qw(SCALAR_CACHE LIST_CACHE)};
-      $so = $so->[0] if ref $so;
-      $lo = $lo->[0] if ref $lo;
-      
-      # Funny thing here that they both mean the same!
-      # If there were three contexts, they wouldn't.
-      if ($so eq 'MERGE' || $lo eq 'MERGE') {
-	$lists = $scalars;	# Alias them together
-      } 
-    }
-    
-    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
-      my $hash = ($context eq 'SCALAR_CACHE') ? $scalars : $lists;
-      # If the option wasn't `TIE', this call does nothing.
-      _my_tie($context, $hash, $options);  # Croaks on failure
-      $options{$context} ||= '';
+    foreach $context (qw(SCALAR LIST)) {
+      # If the relevant option wasn't `TIE', this call does nothing.
+      _my_tie($context, $caches{$context}, $options);  # Croaks on failure
     }
   }
   
@@ -140,18 +151,14 @@ sub memoize {
   # And you know what?  More stuff keeps going in!
   $memotable{$cref} = 
   {
-    OPTIONS => $options,
-    UNMEMOIZED => $cref,
+    O => $options,  # Short keys here for things we need to access frequently
+    N => $normalizer,
+    U => $cref,
     MEMOIZED => $wrapper,
     PACKAGE => $uppack,
     NAME => $install_name,
-    MEMOS => [ $scalars, $lists ],		# Memo tables 
-
-    # This gets a short name because we check it on every call
-    # It says which contexts are forbidden
-    X => [map {exists $options{$_} && $options{$_} eq 'FAULT'} 
-	  qw(SCALAR_CACHE LIST_CACHE)
-	 ],
+    S => $caches{SCALAR},
+    L => $caches{LIST},
   };
 
   $wrapper			# Return just memoized version
@@ -160,7 +167,7 @@ sub memoize {
 # This function tries to load a tied hash class and tie the hash to it.
 sub _my_tie {
   my ($context, $hash, $options) = @_;
-  my $fullopt = $options->{$context};
+  my $fullopt = $options->{"${context}_CACHE"};
 
   # We already checked to make sure that this works.
   my $shortopt = (ref $fullopt) ? $fullopt->[0] : $fullopt;
@@ -170,7 +177,7 @@ sub _my_tie {
   my @args = ref $fullopt ? @$fullopt : ();
   shift @args;
   my $module = shift @args;
-  if ($context eq 'LIST_CACHE' && $scalar_only{$module}) {
+  if ($context eq 'LIST' && $scalar_only{$module}) {
     croak("You can't use $module for LIST_CACHE because it can only store scalars");
   }
   my $modulefile = $module . '.pm';
@@ -194,80 +201,81 @@ sub _my_tie {
   1;
 }
 
+sub flush_cache {
+  my $func = _make_cref($_[0], scalar caller);
+  my $info = $memotable{$revmemotable{$func}};
+  die "$func not memoized" unless defined $info;
+  for my $context (qw(S L)) {
+    my $cache = $info->{$context};
+    if (tied %$cache && ! (tied %$cache)->can('CLEAR')) {
+      my $funcname = defined($info->{NAME}) ? 
+          "function $info->{NAME}" : "anonymous function $func";
+      my $context = {S => 'scalar', L => 'list'}->{$context};
+      croak "Tied cache hash for $context-context $funcname does not support flushing";
+    } else {
+      %$cache = ();
+    }
+  }
+}
 
 # This is the function that manages the memo tables.
 sub _memoizer {
   my $orig = shift;		# stringized version of ref to original func.
   my $info = $memotable{$orig};
-  my $normalizer = $info->{OPTIONS}{NORMALIZER} || \&_default_normalizer;
+  my $normalizer = $info->{N};
   
-  # We should probably do this at memoize time instead of at call time
-  unless (ref $normalizer) {
-    unless ($normalizer =~ /::/) {
-      no strict;
-      $normalizer = \&{$info->{PACKAGE} . '::' . $normalizer};
-    }
-  }
-
   my $argstr;
-  my $context = (wantarray() ? $LIST : $SCALAR);
+  my $context = (wantarray() ? LIST : SCALAR);
 
-  # User requested FAULT option?
-  if ($info->{X}[$context]) {
-    my $funcname = $info->{NAME};
-    my $context = $context ? 'list' : 'scalar';
-    if (defined $funcname) {
-      croak "Function `$funcname' called in forbidden $context context; faulting";
-    } else {
-      croak "Anonymous function called in forbidden $context context; faulting";
-    }
-  }
-
-  { no strict;
-    if ($context == $SCALAR) {
+  if (defined $normalizer) { 
+    no strict;
+    if ($context == SCALAR) {
       $argstr = &{$normalizer}(@_);
-    } elsif ($context == $LIST) {
+    } elsif ($context == LIST) {
       ($argstr) = &{$normalizer}(@_);
     } else {
-      croak "Internal error \#41; context was neither \$LIST nor \$SCALAR\n";
+      croak "Internal error \#41; context was neither LIST nor SCALAR\n";
     }
+  } else {                      # Default normalizer
+    $argstr = join $;,@_;       # $;,@_;? Perl is great.
   }
-  if ($context == $SCALAR) {
-    if (exists $info->{MEMOS}[$SCALAR]{$argstr}) {
-      return $info->{MEMOS}[$SCALAR]{$argstr};
+
+  if ($context == SCALAR) {
+    my $cache = $info->{S};
+    _crap_out($info->{NAME}, 'scalar') unless defined $cache;
+    if (exists $cache->{$argstr}) { 
+      return $cache->{$argstr};
     } else {
-      my $val = &{$info->{UNMEMOIZED}}(@_);
+      my $val = &{$info->{U}}(@_);
       # Scalars are considered to be lists; store appropriately
-      if ($info->{OPTIONS}{SCALAR_CACHE} eq 'MERGE') {
-	$info->{MEMOS}[$SCALAR]{$argstr} = [$val];
+      if ($info->{O}{SCALAR_CACHE} eq 'MERGE') {
+	$cache->{$argstr} = [$val];
       } else {
-	$info->{MEMOS}[$SCALAR]{$argstr} = $val;
+	$cache->{$argstr} = $val;
       }
       $val;
     }
-  } elsif ($context == $LIST) {
-    if (exists $info->{MEMOS}[$LIST]{$argstr}) {
-      my $val = $info->{MEMOS}[$LIST]{$argstr};
+  } elsif ($context == LIST) {
+    my $cache = $info->{L};
+    _crap_out($info->{NAME}, 'list') unless defined $cache;
+    if (exists $cache->{$argstr}) {
+      my $val = $cache->{$argstr};
       return ($val) unless ref $val eq 'ARRAY';
       # An array ref is ambiguous. Did the function really return 
       # an array ref?  Or did we cache a list-context list return in
       # an anonymous array?
       # If LISTCONTEXT=>MERGE, then the function never returns lists,
       # so we know for sure:
-      return ($val) if $info->{OPTIONS}{LIST_CACHE} eq 'MERGE';
+      return ($val) if $info->{O}{LIST_CACHE} eq 'MERGE';
       # Otherwise, we're doomed.  ###BUG
       return @$val;
     } else {
-      my $q = $info->{MEMOS}[$LIST]{$argstr} = [&{$info->{UNMEMOIZED}}(@_)];
+      my $q = $cache->{$argstr} = [&{$info->{U}}(@_)];
       @$q;
     }
   } else {
-    croak "Internal error \#42; context was neither \$LIST nor \$SCALAR\n";
+    croak "Internal error \#42; context was neither LIST nor SCALAR\n";
   }
-}
-
-sub _default_normalizer {
-  join $;,@_;			# $;,@_;? Perl is great.
 }
 
 sub unmemoize {
@@ -287,13 +295,13 @@ sub unmemoize {
   if (defined $name) {
     no strict;
     local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
-    *{$name} = $tabent->{UNMEMOIZED}; # Replace with original function
+    *{$name} = $tabent->{U}; # Replace with original function
   }
   undef $memotable{$revmemotable{$cref}};
   undef $revmemotable{$cref};
 
   # This removes the last reference to the (possibly tied) memo tables
-  # my ($old_function, $memotabs) = @{$tabent}{'UNMEMOIZED','MEMOS'};
+  # my ($old_function, $memotabs) = @{$tabent}{'U','S','L'};
   # undef $tabent; 
 
 #  # Untie the memo tables if they were tied.
@@ -305,7 +313,7 @@ sub unmemoize {
 #    }
 #  }
 
-  $tabent->{UNMEMOIZED};
+  $tabent->{U};
 }
 
 sub _make_cref {
@@ -324,7 +332,7 @@ sub _make_cref {
     }
     no strict;
     if (defined $name and !defined(&$name)) {
-      croak "Cannot memoize nonexistent function `$fn'";
+      croak "Cannot operate on nonexistent function `$fn'";
     }
 #    $cref = \&$name;
     $cref = *{$name}{CODE};
@@ -334,6 +342,15 @@ sub _make_cref {
   }
   $DEBUG and warn "${name}($fn) => $cref in _make_cref\n";
   $cref;
+}
+
+sub _crap_out {
+  my ($funcname, $context) = @_;
+  if (defined $funcname) {
+    croak "Function `$funcname' called in forbidden $context context; faulting";
+  } else {
+    croak "Anonymous function called in forbidden $context context; faulting";
+  }
 }
 
 1;
@@ -364,14 +381,15 @@ Options include:
 
 	SCALAR_CACHE => 'MEMORY'
 	SCALAR_CACHE => ['TIE', Module, arguments...]
+        SCALAR_CACHE => ['HASH', \%cache_hash ]
 	SCALAR_CACHE => 'FAULT'
 	SCALAR_CACHE => 'MERGE'
 
 	LIST_CACHE => 'MEMORY'
 	LIST_CACHE => ['TIE', Module, arguments...]
+        LIST_CACHE => ['HASH', \%cache_hash ]
 	LIST_CACHE => 'FAULT'
 	LIST_CACHE => 'MERGE'
-
 
 =head1 DESCRIPTION
 
@@ -569,6 +587,45 @@ argument lists:
 
 for example.
 
+The default normalizer also won't work when the function's arguments
+are references.  For exampple, consider a function C<g> which gets two
+arguments: A number, and a reference to an array of numbers:
+
+	g(13, [1,2,3,4,5,6,7]);
+
+The default normalizer will turn this into something like
+C<"13\024ARRAY(0x436c1f)">.  That would be all right, except that a
+subsequent array of numbers might be stored at a different location
+even though it contains the same data.  If this happens, C<Memoize>
+will think that the arguments are different, even though they are
+equivalent.  In this case, a normalizer like this is appropriate:
+
+	sub normalize { join ' ', $_[0], @{$_[1]} }
+
+For the example above, this produces the key "13 1 2 3 4 5 6 7".
+
+Another use for normalizers is when the function depends on data other
+than those in its arguments.  Suppose you have a function which
+returns a value which depends on the current hour of the day:
+
+	sub on_duty {
+          my ($problem_type) = @_;
+	  my $hour = (localtime)[2];
+          open my $fh, "$DIR/$problem_type" or die...;
+          my $line;
+          while ($hour-- > 0)
+            $line = <$fh>;
+          } 
+	  return $line;
+	}
+
+At 10:23, this function generates the tenth line of a data file; at
+3:45 PM it generates the 15th line instead.  By default, C<Memoize>
+will only see the $problem_type argument.  To fix this, include the
+current hour in the normalizer:
+
+        sub normalize { join ' ', (localtime)[2], @_ }
+
 The calling context of the function (scalar or list context) is
 propagated to the normalizer.  This means that if the memoized
 function will treat its arguments differently in list context than it
@@ -592,12 +649,13 @@ its value is cached in the other hash.  You can control the caching
 behavior of both contexts independently with these options.
 
 The argument to C<LIST_CACHE> or C<SCALAR_CACHE> must either be one of
-the following four strings:
+the following five strings:
 
 	MEMORY
 	TIE
 	FAULT
 	MERGE
+        HASH                                                           
 
 or else it must be a reference to a list whose first element is one of
 these four strings, such as C<[TIE, arguments...]>.
@@ -641,6 +699,12 @@ A useful use of this feature: You can construct a batch program that
 runs in the background and populates the memo table, and then when you
 come to run your real program the memoized function will be
 screamingly fast because all its results have been precomputed. 
+
+=item C<HASH>
+
+C<HASH> allows you to specify that a particular hash that you supply
+will be used as the cache.  You can tie this hash beforehand to give
+it any behavior you want.
 
 =item C<FAULT>
 
@@ -706,7 +770,9 @@ return values under keys that begin with C<L:>.
 
 =back
 
-=head1 OTHER FUNCTION
+=head1 OTHER FACILITIES
+
+=head2 C<unmemoize>
 
 There's an C<unmemoize> function that you can import if you want to.
 Why would you want to?  Here's an example: Suppose you have your cache
@@ -714,10 +780,9 @@ tied to a DBM file, and you want to make sure that the cache is
 written out to disk if someone interrupts the program.  If the program
 exits normally, this will happen anyway, but if someone types
 control-C or something then the program will terminate immediately
-without syncronizing the database.  So what you can do instead is
+without synchronizing the database.  So what you can do instead is
 
     $SIG{INT} = sub { unmemoize 'function' };
-
 
 Thanks to Jonathan Roy for discovering a use for C<unmemoize>.
 
@@ -729,6 +794,23 @@ unmemoized version of the function.
 
 If you ask it to unmemoize a function that was never memoized, it
 croaks.
+
+=head2 C<flush_cache>
+
+C<flush_cache(function)> will flush out the caches, discarding I<all>
+the cached data.  The argument may be a funciton name or a reference
+to a function.  For finer control over when data is discarded or
+expired, see the documentation for C<Memoize::Expire>, included in
+this package.
+
+Note that if the cache is a tied hash, C<flush_cache> will attempt to
+invoke the C<CLEAR> method on the hash.  If there is no C<CLEAR>
+method, this will cause a run-time error.
+
+An alternative approach to cache flushing is to use the C<HASH> option
+(see above) to request that C<Memoize> use a particular hash variable
+as its cache.  Then you can examine or modify the hash at any time in
+any way you desire.
 
 =head1 CAVEATS
 
@@ -768,7 +850,7 @@ Its return value is the numuber of characters it printed, but you
 probably didn't care about that.  But C<Memoize> doesn't understand
 that.  If you memoize this function, you will get the result you
 expect the first time you ask it to print the sum of 2 and 3, but
-subsequent calls will return the number 11 (the return value of
+subsequent calls will return 1 (the return value of
 C<print>) without actually printing anything.
 
 =item *
@@ -803,6 +885,15 @@ this time the list has already had its head removed; C<main> will
 erroneously remove another element from it.  The list will get shorter
 and shorter every time you call C<main>.
 
+Similarly, this:
+
+	$u1 = getusers();    
+	$u2 = getusers();    
+	pop @$u1;
+
+will modify $u2 as well as $u1, because both variables are references
+to the same array.  Had C<getusers> not been memoized, $u1 and $u2
+would have referred to different arrays.
 
 =back
 
@@ -855,21 +946,16 @@ module to implement whatever policy you desire.
 
 =head1 BUGS
 
-Needs a better test suite, especially for the tied and expiration stuff.
+The test suite is much better, but always needs improvement.
 
-Also, there is some problem with the way C<goto &f> works under
+There used to be some problem with the way C<goto &f> works under
 threaded Perl, because of the lexical scoping of C<@_>.  This is a bug
 in Perl, and until it is resolved, Memoize won't work with these
-Perls.  To fix it, you need to chop the source code a little.  Find
-the comment in the source code that says C<--- THREADED PERL
-COMMENT---> and comment out the active line and uncomment the
-commented one.  Then try it again.
-
-I wish I could investigate this threaded Perl problem.  If someone
-could lend me an account on a machine with threaded Perl for a few
-hours, it would be very helpful.
-
-That is why the version number is 0.51 instead of 1.00.
+Perls.  This is probably still the case, although I have not been able
+to try it out.  If you encounter this problem, you can fix it by
+chopping the source code a little.  Find the comment in the source
+code that says C<--- THREADED PERL COMMENT---> and comment out the
+active line and uncomment the commented one.  Then try it again.
 
 Here's a bug that isn't my fault: Some versions of C<DB_File> won't
 let you store data under a key of length 0.  That means that if you
@@ -913,8 +999,8 @@ investigating problems under threaded Perl, to Alex Dudkevich for
 reporting the bug in prototyped functions and for checking my patch,
 to Tony Bass for many helpful suggestions, to Philippe Verdret for
 enlightening discussion of Hook::PrePostCall, to Nat Torkington for
-advice I ignored, to Chris Nandor for portability advice, and to Jenda
+advice I ignored, to Chris Nandor for portability advice, to Randal
+Schwartz for suggesting the 'C<flush_cache> function, and to Jenda
 Krynicky for being a light in the world.
 
 =cut
-

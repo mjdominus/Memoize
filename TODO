@@ -242,6 +242,52 @@ manually expire data items.
 
 =item *
 
+19990925 Randal says that the docs for Memoize;:Expire should make it
+clear that the expired entries are never flushed all at once.  He
+asked if you would need to do that manually.  I said:
+
+  Right, if that's what you want.  If you have EXISTS return false,
+  it'll throw away the old cached item and replace it in the cache
+  with a new item.  But if you want the cache to actually get smaller,
+  you have to do that yourself.
+
+  I was planning to build an Expire module that implemented an LRU
+  queue and kept the cache at a constant fixed size, but I didn't get
+  to it yet.  It's not clear to me that the automatic exptynig-out
+  behavior is very useful anyway.  The whole point of a cache is to
+  trade space for time, so why bother going through the cache to throw
+  away old items before you need to?
+
+Randal then pointed out that it could discard expired items at DESTRoY
+or TIEHASH time, which seemed like a good idea, because if the cache
+is on disk you might like to keep it as small as possible.
+
+=item *
+
+19991219 Philip Gwyn suggests this technique:  You have a load_file
+function that memoizes the file contexts.  But then if the file
+changes you get the old contents.  So add a normalizer that does
+
+	return join $;, (stat($_[0])[9]), $_[0];
+
+Now when the modification date changes, the true key returned by the
+normalizer is different, so you get a cache miss and it loads the new
+contents.   Disadvantage:  The old contents are still in the cache.  I
+think it makes more sense to have a special expiration manager for
+this.  Make one up and bundle it.
+
+19991220 I have one written: Memoize::ExpireFile.  But how can you
+make this work when the function might have several arguments, of
+which some are filenames and some aren't?
+
+=item *
+
+19991219 There should be an inheritable TIEHASH method that does the
+argument processing properly.
+
+19991220 Philip Gwyn contributed a patch for this.
+
+=item *
 There was probably some other stuff that I forgot.
 
 =back

@@ -6,7 +6,7 @@ use Fcntl;
 
 # print STDERR $INC{'Memoize.pm'}, "\n";
 
-print "1..6\n";
+print "1..10\n";
 
 # Test MERGE
 sub xx {
@@ -35,4 +35,16 @@ eval { my ($a) = na() };  # Should fault
 print (($@) ?  "ok 6\n" : "not ok 6\n");
 
 
+# Test HASH
+my (%s, %l);
+sub nul {}
+memoize 'nul', SCALAR_CACHE => [HASH => \%s], LIST_CACHE => [HASH => \%l];
+nul('x');
+nul('y');
+print ((join '', sort keys %s) eq 'xy' ? "ok 7\n" : "not ok 7\n");
+print ((join '', sort keys %l) eq ''   ? "ok 8\n" : "not ok 8\n");
+() = nul('p');
+() = nul('q');
+print ((join '', sort keys %s) eq 'xy' ? "ok 9\n" : "not ok 9\n");
+print ((join '', sort keys %l) eq 'pq' ? "ok 10\n" : "not ok 10\n");
 

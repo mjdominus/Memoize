@@ -251,7 +251,7 @@ cache item after ten seconds.
 	sub EXISTS {
 	  my ($cache, $key) = @_;
 	  if (exists $cache->{$key} && 
-              $cache->{$key}{EXPIRE_TIME} < time) {
+              $cache->{$key}{EXPIRE_TIME} > time) {
 	    return 1
 	  } else {
 	    return 0;  # Do NOT return `undef' here.
