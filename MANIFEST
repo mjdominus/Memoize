@@ -24,9 +24,9 @@ t/tie_sdbm.t
 t/tie_ndbm.t
 t/tie_storable.t
 t/expire.t
-t/expire_module_n.t
-t/expire_module_t.t
-t/expire_file.t
+t/expmod_n.t
+t/expmod_t.t
+t/expfile.t
 t/flush.t
 t/array_confusion.t
 article.html

@@ -3,7 +3,7 @@ package Memoize::Expire;
 # require 5.00556;
 use Carp;
 $DEBUG = 0;
-$VERSION = '0.66';
+$VERSION = '1.00';
 
 # This package will implement expiration by prepending a fixed-length header
 # to the font of the cached data.  The format of the header will be:
@@ -313,13 +313,13 @@ example above demonstrates how to do this, as does C<Memoize::Expire>.
 
 Another sample module, C<Memoize::Saves>, is included with this
 package.  It implements a policy that allows you to specify that
-certain function values whould always be looked up afresh.  See the
+certain function values would always be looked up afresh.  See the
 documentation for details.
 
 =head1 ALTERNATIVES
 
 Brent Powers has a C<Memoize::ExpireLRU> module that was designed to
-wotk with Memoize and provides expiration of least-recently-used data.
+work with Memoize and provides expiration of least-recently-used data.
 The cache is held at a fixed number of entries, and when new data
 comes in, the least-recently used data is expired.  See
 L<http://search.cpan.org/search?mode=module&query=ExpireLRU>.
