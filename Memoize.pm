@@ -8,10 +8,10 @@
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize@plover.com for a license.
 #
-# Version 0.45 beta $Revision: 1.8 $ $Date: 1998/09/05 03:43:53 $
+# Version 0.46 beta $Revision: 1.9 $ $Date: 1998/09/07 19:42:52 $
 
 package Memoize;
-$VERSION = '0.45';
+$VERSION = '0.46';
 
 =head1 NAME
 
@@ -449,21 +449,48 @@ and shorter every time you call C<main>.
 
 =back
 
+=head1 PERSISTENT CACHE SUPPORT
+
+You can tie the cache tables to any sort of tied hash that you want
+to, as long as it supports C<TIEHASH>, C<FETCH>, C<STORE>, and
+C<EXISTS>.  For example,
+
+	memoize 'function', SCALAR_CACHE => 
+                            [TIE, GDBM_File, $filename, O_RDWR|O_CREAT, 0666];
+
+works just fine.  For some storage methods, you need a little glue.
+
+C<SDBM_File> doesn't supply an C<EXISTS> method, so included in this
+package is a glue module called C<Memoize::SDBM_File> which does
+provide one.  Use this instead of plain C<SDBM_File> to store your
+cache table on disk in an C<SDBM_File> database:
+
+	memoize 'function', 
+                SCALAR_CACHE => 
+                [TIE, Memoize::SDBM_File, $filename, O_RDWR|O_CREAT, 0666];
+
+C<Storable> isn't a tied hash class at all.  You can use it to store a
+hash to disk and retrieve it again, but yu can't modify the hash while
+it's on the disk.  So if you want to store your cache table in a
+C<Storable> database, use C<Memoize::Storable>, which puts a hashlike
+front-end onto C<Storable>.  The hash table is actually kept in
+memory, and is loaded from your C<Storable> file at the time you
+memoize the function, and stored back at the time you unmemoize the
+function:
+
+	memoize 'function', 
+                SCALAR_CACHE => [TIE, Memoize::Storable, $filename];
+
+	memoize 'function', 
+                SCALAR_CACHE => [TIE, Memoize::Storable, $filename, 'nstore'];
+
+Include the `nstore' option to have the C<Storable> database written
+in `network order'.  (See L<Storable> for moer details about this.)
+
 =head1 MY BUGS
 
 Needs a better test suite, especially for the tied stuff.
-That is why the version number is 0.45 instead of 0.50.
-
-=head1 OTHER PEOPLE'S BUGS
-
-The tied hash class you use for storing your cache table must support
-the following methods: C<tiehash>, C<fetch>, C<store>, C<exists>.  In
-particular, you can't use C<SDBM_File> because it doesn't have
-C<exists>.  This package contains a glue module, called
-C<Memoize::SDBM_File>, which provides an C<exists> method so that you
-can use C<SDBM_File> with C<Memoize>.  Just replace C<SDBM_File> with
-C<Memoize::SDBM_File> in your call to C<memoize>; everything else is
-the same.
+That is why the version number is 0.46 instead of 0.50.
 
 =head1 MAILING LIST
 
@@ -547,7 +574,7 @@ sub memoize {
     $install_name = $uppack . '::' . $install_name
 	unless $install_name =~ /::/;
     no strict;
-    local($) = 0;	       # ``Subroutine $install_name redefined at ...''
+    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
     *{$install_name} = $wrapper; # Install memoized version
   }
 
@@ -742,11 +769,25 @@ sub unmemoize {
   my $name = $tabent->{NAME};
   if (defined $name) {
     no strict;
-    local($) = 0;	       # ``Subroutine $install_name redefined at ...''
+    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
     *{$name} = $tabent->{UNMEMOIZED}; # Replace with original function
   }
   undef $memotable{$revmemotable{$cref}};
   undef $revmemotable{$cref};
+
+  # This removes the last reference to the (possibly tied) memo tables
+  # my ($old_function, $memotabs) = @{$tabent}{'UNMEMOIZED','MEMOS'};
+  # undef $tabent; 
+
+#  # Untie the memo tables if they were tied.
+#  my $i;
+#  for $i (0,1) {
+#    if (tied %{$memotabs->[$i]}) {
+#      warn "Untying hash #$i\n";
+#      untie %{$memotabs->[$i]};
+#    }
+#  }
+
   $tabent->{UNMEMOIZED};
 }
 

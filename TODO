@@ -1,4 +1,4 @@
-# Version 0.05 alpha $Revision: 1.3 $ $Date: 1998/09/05 03:44:04 $
+# Version 0.05 alpha $Revision: 1.4 $ $Date: 1998/09/07 19:48:43 $
 
 =head1 TO DO
 
@@ -23,10 +23,7 @@ large effect on the performance of C<main>.  But if there was a big
 difference, you would know that C<suba> or C<subb> was a good
 candidate for optimization if you needed to make C<main> go faster.
 
-=item * 
-
-Maybe a tied-hash interface to the memo-table, which a hook to
-      automatically populate an entry if no value is there yet?
+Done.
 
 =item * 
 
@@ -39,12 +36,16 @@ We could even bless the new function reference so that it could have
 accessor methods for getting to the original function, the options,
 the memo table, etc.
 
+Naah.
+
 =item *
 
 The TODISK feature is not ready yet.  It will have to be rather
 complicated, providing options for which disk method to use (GDBM?
 DB_File?  Flat file?  Storable?  User-supplied?) and which stringizing
 method to use (FreezeThaw?  Marshal?  User-supplied?)
+
+Done!
 
 =item *
 
@@ -76,9 +77,13 @@ reason not to do this, but I can't remember what it was.
 
 Add more array value tests to the test suite.
 
+Does it need more now?
+
 =item *
 
-Fix that `Subroutine u rededined ... line 484' message.
+Fix that `Subroutine u redefined ... line 484' message.
+
+Fixed, I think.
 
 =item *
 
@@ -89,54 +94,9 @@ Get rid of any remaining *{$ref}{CODE} or similar magic hashes.
 There should be an option to dump out the memoized values or to
 otherwise traverse them.
 
-=item *
+What for?
 
-There was probably some other stuff that I forgot.
-
-
-=item * 
-
-Here's the preliminary interface spec for the C<TODISK> option:
-`memoize' takes options named C<SCALAR_CONTEXT> and C<LIST_CONTEXT>.
-Legal values are
-
-	MEMORY
-	TIE
-	FAULT
-	MERGE
-
-or a reference to a list whose first element is one of these.  The
-default for both is MEMORY, which means that Perl's builtin hashes are
-used, the way they are now.  FAULT means that the function should
-never be called in scalar/list context, and that Memoize should croak
-if it is.  TIE means that the hash will be tied; it's usaully written
-as
-
-	[TIE, packagename, argument-list]
-
-which specifies the package name and arguments for the tie.  Memoize
-will load the package if appropriate.  Thus
-
-	[TIE, Storable, filename, ...]
-	[TIE, DB_File, filename, flags, mode, ...]
-	[TIE, MLDBM, DB_File, ... ]
-
-MERGE means that return values in the specified context will be stored
-in the same structure that is used for the other context.  For
-example, suppose you have a function which always returns a scalar,
-and doesn't care whether it was called in scalar or list context.  You
-don't want to store its list-context reutrn separately from its
-scalar-context return, because they're going to be the same anyway,
-and if you stored them separately, you'd waste a call and a cache
-slot.  So you say LIST_CONTEXT => MERGE, and then list context is
-considered the same as scalar context.
-
-You can also use MERGE with a normalizer to get the list-context and
-scalar-context returns stored in the same database without conflicting
-with each other.
-
-If you specify MERGE for both, it's either an error or else you get
-them stored in one in-memory hash, or something.
+Maybe the tied hash interface taskes care of this anyway?
 
 =item *
 
@@ -146,24 +106,18 @@ Include an example that caches DNS lookups.
 
 Make tie for Storable (Memoize::Storable)
 
-=item*
+A prototype of Memoize::Storable is finished.  Test it and add to the
+test suite.
+
+Done.
+
+=item *
 
 Make tie for DBI  (Memoize::DBI)
 
 =item *
 
-Tie for SDBM doesn't work.  Can't subclass SDBM?  Why not?
-
-=item *
-
 I think there's a bug.  See `###BUG'.
-
-=item *
-
-Docs / code inconsistent about SCALAR_CONTEXT vs SCALAR_CACHE.
-Make up your mind.
-
-Decision:  SCALAR_CACHE.
 
 =item * 
 
@@ -187,11 +141,29 @@ writable in-memory cache?  A generic tied hash maybe?
 
 Maybe `save' and `restore' methods?
 
+It isn't working right because the destructor doesn't get called at
+the right time.
+
+This is fixed.  `use strict vars' would have caught it immediately.  Duh.
+
 =item *
+
+Don't forget about generic interface to Storable-like packages
+
+=item * 
+
 
 Maybe add in TODISK after all, with TODISK => 'filename' equivalent to
 
 	SCALAR_CACHE => [TIE, Memoize::SDBM_File, $filename, O_RDWR|O_CREAT, 0666],
 	LIST_CACHE => MERGE
+
+=item *
+
+Maybe the default for LIST_CACHE should be MERGE anyway.
+
+=item *
+
+There was probably some other stuff that I forgot.
 
 =back

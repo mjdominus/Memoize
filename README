@@ -1,12 +1,21 @@
 
 Name:		Memoize
 What:		Transparently speed up functions by caching return values.
-Version:	0.45
+Version:	0.46
 Author:		Mark-Jason Dominus (mjd-perl-memoize@plover.com)
 
 ################################################################
 
 What's new since the previous release:
+
+Now has an interface to `Storable'.  This wasn't formerly possible,
+because the base package can only store caches via modules that
+present a tied hash interface, and `Storable' doesn't.  Solution:
+Memoize::Storable is a tied hash interface to `Storable'.
+
+################################################################
+
+What's new since 0.45:
 
 Storage of cached function return values in a static file is now
 tentatively supported.  `memoize' now accepts new options SCALAR_CACHE
@@ -43,7 +52,6 @@ function, instead of the constant `1'.  It was already docmuented to
 do so. 
 
 ################################################################
-
 
 =head1 NAME
 
@@ -160,13 +168,14 @@ There are some optional options you can pass to C<memoize> to change
 the way it behaves a little.  To supply options, invoke C<memoize>
 like this:
 
-	memoize(function, TODISK => filename,
-	                  NORMALIZER => function,
-			  INSTALL => newname
+	memoize(function, NORMALIZER => function,
+			  INSTALL => newname,
+                          SCALAR_CACHE => option,
+	                  LIST_CACHE => option
 			 );
 
-Each of these three options is optional; you can include some, all, or
-none of them.
+Each of these options is optional; you can include some, all, or none
+of them.
 
 =head2 INSTALL
 
@@ -179,6 +188,9 @@ For example,
 installs the memoized version of C<fib> as C<fastfib>; without the
 C<INSTALL> option it would have replaced the old C<fib> with the
 memoized version.  
+
+To prevent C<memoize> from installing the memoized version anywhere, use
+C<INSTALL => undef>.
 
 =head2 NORMALIZER
 
@@ -233,7 +245,7 @@ You would tell C<Memoize> to use this normalizer this way:
 C<memoize> knows that if the normalized version of the arguments is
 the same for two argument lists, then it can safely look up the value
 that it computed for one argument list and return it as the result of
-calling the function with the other argmuent list, even if the
+calling the function with the other argument list, even if the
 argument lists look different.
 
 The default normalizer just concatenates the arguments with C<$;> in
@@ -255,18 +267,135 @@ would in scalar context, you can have the normalizer function select
 its behavior based on the results of C<wantarray>.  Even if called in
 a list context, a normalizer should still return a single string.
 
-=head2 TODISK
+=head2 C<SCALAR_CACHE>, C<LIST_CACHE>
 
-C<TODISK> means that the memo table should be saved to disk so that it
-will persist between invocations of your program.  If you use this
-option, future runs of your program will get immediate benefit from
-the results computed by earlier runs.  A useful use of this feature:
-You can construct a batch program that runs in the background and
-populates the memo table, and then when you come to run your real
-program the memoized function will be screamingly fast because al lits
-results have been precomputed.  Or you would be able to do this, if
-TODISK were implemented, which it presently isn't.  But it will be.
-Some day.  
+Normally, C<Memoize> caches your function's return values into an
+ordinary Perl hash variable.  However, you might like to have the
+values cached on the disk, so that they persist from one run of your
+program to the next, or you might like to associate some other
+interesting semantics with the cached values.  
+
+There's a slight complication under the hood of C<Memoize>: There are
+actually I<two> caches, one for scalar values and one for list values.
+When your function is called in scalar context, its return value is
+cached in one hash, and when your function is called in list context,
+its value is cached in the other hash.  You can control the caching
+behavior of both contexts independently with these options.
+
+The argument to C<LIST_CACHE> or C<SCALAR_CACHE> must either be one of
+the following four strings:
+
+	MEMORY
+	TIE
+	FAULT
+	MERGE
+
+or else it must be a reference to a list whose first element is one of
+these four strings, such as C<[TIE, arguments...]>.
+
+=over 4
+
+=item C<MEMORY>
+
+C<MEMORY> means that return values from the function will be cached in
+an ordinary Perl hash variable.  The hash variable will not persist
+after the program exits.  This is the default.
+
+=item C<TIE>
+
+C<TIE> means that the function's return values will be cached in a
+tied hash.  A tied hash can have any semantics at all.  It is
+typically tied to an on-disk database, so that cached values are
+stored in the database and retrieved from it again when needed, and
+the disk file typically persists after your pogram has exited.  
+
+If C<TIE> is specified as the first element of a list, the remaining
+list elements are taken as arguments to the C<tie> call that sets up
+the tied hash.  For example,
+
+	SCALAR_CACHE => [TIE, DB_File, $filename, O_RDWR | O_CREAT, 0666]
+
+says to tie the hash into the C<DB_File> package, and to pass the
+C<$filename>, C<O_RDWR | O_CREAT>, and C<0666> arguments to the C<tie>
+call.  This has the effect of storing the cache in a C<DB_File>
+database whose name is in C<$filename>.
+
+Other typical uses of C<TIE>:
+
+	LIST_CACHE => [TIE, GDBM_File, $filename, O_RDWR | O_CREAT, 0666]
+	SCALAR_CACHE => [TIE, MLDBM, DB_File, $filename, O_RDWR|O_CREAT, 0666]
+	LIST_CACHE => [TIE, My_Package, $tablename, $key_field, $val_field]
+
+This last might tie the cache hash to a package that you wrote
+yourself that stores the cache in a SQL-accessible database.
+A useful use of this feature: You can construct a batch program that
+runs in the background and populates the memo table, and then when you
+come to run your real program the memoized function will be
+screamingly fast because all its results have been precomputed. 
+
+=item C<FAULT>
+
+C<FAULT> means that you never expect to call the function in scalar
+(or list) context, and that if C<Memoize> detects such a call, it
+should abort the program.  The error message is one of
+
+	`foo' function called in forbidden list context at line ...
+	`foo' function called in forbidden scalar context at line ...
+
+=item C<MERGE>
+
+C<MERGE> normally means the function does not distinguish between list
+and sclar context, and that return values in both contexts should be
+stored together.  C<LIST_CACHE =E<gt> MERGE> means that list context
+return values should be stored in the same hash that is used for
+scalar context returns, and C<SCALAR_CACHE =E<gt> MERGE> means the
+same, mutatis mutandis.  It is an error to specify C<MERGE> for both,
+but it probably does something useful.
+
+Consider this function:
+
+	sub pi { 3; }
+
+Normally, the following code will result in two calls to C<pi>:
+
+    $x = pi();
+    ($y) = pi();
+    $z = pi();
+
+The first call caches the value C<3> in the scalar cache; the second
+caches the list C<(3)> in the list cache.  The third call doesn't call
+the real C<pi> function; it gets the value from the scalar cache.
+
+Obviously, the second call to C<pi> is a waste of time, and storing
+its return value is a waste of space.  Specifying C<LIST_CACHE
+=E<gt> MERGE> will make C<memoize> use the same cache for scalar and
+list context return values, so that the second call uses the scalar
+cache that was populated by the first call.  C<pi> ends up being
+cvalled only once, and both subsequent calls return C<3> from the
+cache, regardless of the calling context.
+
+Another use for C<MERGE> is when you want both kinds of return values
+stored in the same disk file; this saves you from having to deal with
+two disk files instead of one.  You can use a normalizer function to
+keep the two sets of return values separate.  For example:
+
+	memoize 'myfunc',
+	  NORMALIZER => 'n',
+	  SCALAR_CACHE => [TIE, MLDBM, DB_File, $filename, ...],
+	  LIST_CACHE => MERGE,
+	;
+
+	sub n {
+	  my $context = wantarray() ? 'L' : 'S';
+	  # ... now compute the hash key from the arguments ...
+	  $hashkey = "$context:$hashkey";
+	}
+
+This normalizer function will store scalar context return values in
+the disk file under keys that begin with C<S:>, and list context
+return values under keys that begin with C<L:>.
+
+=back
 
 =head1 OTHER FUNCTION
 
@@ -360,6 +489,26 @@ and shorter every time you call C<main>.
 
 =back
 
+=head1 MY BUGS
+
+Needs a better test suite, especially for the tied stuff.
+That is why the version number is 0.45 instead of 0.50.
+
+=head1 OTHER PEOPLE'S BUGS
+
+The tied hash class you use for storing your cache table must support
+the following methods: C<tiehash>, C<fetch>, C<store>, C<exists>.  In
+particular, you can't use C<SDBM_File> because it doesn't have
+C<exists>.  This package contains a glue module, called
+C<Memoize::SDBM_File>, which provides an C<exists> method so that you
+can use C<SDBM_File> with C<Memoize>.  Just replace C<SDBM_File> with
+C<Memoize::SDBM_File> in your call to C<memoize>; everything else is
+the same.
+
+=head1 MAILING LIST
+
+To join a very low-traffic mailing list for announcements about
+C<Memoize>, send an empty note to C<mjd-perl-memoize-request@plover.com>.
 
 =head1 AUTHOR
 
@@ -375,6 +524,9 @@ for news and upgrades.
 <p>See <a href="http://www.plover.com/~mjd/perl/Memoize/">The <tt>Memoize.pm</tt> Page</a> for news and upgrades.</p>
 
 =end html
+
+To join a mailing list for announcements about C<Memoize>, send an
+empty message to C<mjd-perl-memoize-request@plover.com>.
 
 =cut
 

@@ -3,7 +3,13 @@
 use lib '..';
 use Memoize;
 
+if (-e '.fast') {
+  print "1..0\n";
+  exit 0;
+}
+
 print STDERR "\nWarning: I'm testing the speedup.  This might take up to sixty seconds.\n                    ";
+
 
 print "1..6\n";
 
