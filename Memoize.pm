@@ -8,10 +8,318 @@
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize@plover.com for a license.
 #
-# Version 0.46 beta $Revision: 1.9 $ $Date: 1998/09/07 19:42:52 $
+# Version 0.47 beta $Revision: 1.11 $ $Date: 1998/09/15 05:00:10 $
 
 package Memoize;
-$VERSION = '0.46';
+$VERSION = '0.47';
+
+
+
+#
+# Usage memoize(functionname/ref,
+#               { NORMALIZER => coderef, INSTALL => name,
+#                 LIST_CACHE => descriptor, SCALAR_CACHE => descriptor }
+#
+
+use Carp;
+use Exporter;
+use vars qw($DEBUG);
+@ISA = qw(Exporter);
+@EXPORT = qw(memoize);
+@EXPORT_OK = qw(unmemoize);
+use strict;
+
+my %memotable;
+my %revmemotable;
+my ($SCALAR, $LIST) = (0, 1);	# Constants
+my @CONTEXT_TAGS = qw(MERGE TIE MEMORY FAULT);
+my %IS_CACHE_TAG = map {($_ => 1)} @CONTEXT_TAGS;
+
+sub memoize {
+  my $fn = shift;
+  my %options = @_;
+  my $options = \%options;
+  
+  unless (defined($fn) && 
+	  (ref $fn eq 'CODE' || ref $fn eq '')) {
+    croak "Usage: memoize 'functionname'|coderef {OPTIONS}";
+  }
+
+  my $uppack = caller;		# TCL me Elmo!
+  my $cref;			# Code reference to original function
+  my $name = (ref $fn ? undef : $fn);
+
+  # Convert function names to code references
+  $cref = &_make_cref($fn, $uppack);
+
+  # Goto considered harmful!  Hee hee hee.  
+  my $wrapper = eval "sub { unshift \@_, qq{$cref}; goto &_memoizer; }";
+
+  my $install_name;
+  if (defined $options->{INSTALL}) {
+    # INSTALL => name
+    $install_name = $options->{INSTALL};
+  } elsif (! exists $options->{INSTALL}) {
+    # No INSTALL option provided; use original name if possible
+    $install_name = $name;
+  } else {
+    # INSTALL => undef  means don't install
+  }
+
+  if (defined $install_name) {
+    $install_name = $uppack . '::' . $install_name
+	unless $install_name =~ /::/;
+    no strict;
+    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
+    *{$install_name} = $wrapper; # Install memoized version
+  }
+
+  $revmemotable{$wrapper} = "" . $cref; # Turn code ref into hash key
+
+  # These will be the caches!
+  my $scalars = {};
+  my $lists = {};
+
+  # Now deal with the TODISK options
+  {
+    my $context;
+    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
+      my $tag = $options{$context};
+      next unless defined $tag;
+      unless (   ref $tag eq '' 
+	      || ref $tag eq 'ARRAY') {
+	croak "Argument of $context must be either string, or array ref; aborting";
+      }
+      $tag = (ref $tag eq 'ARRAY') ? $tag->[0] : $tag;
+      unless ($IS_CACHE_TAG{$tag}) {
+	croak "Unrecognized option to `$context': `$tag' should be one of (@CONTEXT_TAGS); aborting";
+      }
+    }
+
+    # Handle `MERGE'
+    {
+      local($^W) = 0;  # Shut up `uninitialized value' warnings
+      my ($so, $lo) = @options{qw(SCALAR_CACHE LIST_CACHE)};
+      $so = $so->[0] if ref $so;
+      $lo = $lo->[0] if ref $lo;
+      
+      # Funny thing here that they both mean the same!
+      # If there were three contexts, they wouldn't.
+      if ($so eq 'MERGE' || $lo eq 'MERGE') {
+	$lists = $scalars;	# Alias them together
+      } 
+    }
+    
+    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
+      my $hash = ($context eq 'SCALAR_CACHE') ? $scalars : $lists;
+      # If the option wasn't `TIE', this call does nothing.
+      _my_tie($context, $hash, $options);  # Croaks on failure
+      $options{$context} ||= '';
+    }
+  }
+  
+  # We should put some more stuff in here eventually.
+  # We've been saying that for serveral versions now.
+  # And you know what?  More stuff keeps going in!
+  $memotable{$cref} = 
+  {
+    OPTIONS => $options,
+    UNMEMOIZED => $cref,
+    MEMOIZED => $wrapper,
+    PACKAGE => $uppack,
+    NAME => $install_name,
+    MEMOS => [ $scalars, $lists ],		# Memo tables 
+
+    # This gets a short name because we check it on every call
+    # It says which contexts are forbidden
+    X => [map {exists $options{$_} && $options{$_} eq 'FAULT'} 
+	  qw(SCALAR_CACHE LIST_CACHE)
+	 ],
+  };
+
+  $wrapper			# Return just memoized version
+}
+
+# This function tries to load a tied hash class and tie the hash to it.
+sub _my_tie {
+  my ($context, $hash, $options) = @_;
+  my $fullopt = $options->{$context};
+
+  # We already checked to make sure that this works.
+  my $shortopt = (ref $fullopt) ? $fullopt->[0] : $fullopt;
+  
+  return unless defined $shortopt && $shortopt eq 'TIE';
+
+  my @args = ref $fullopt ? @$fullopt : ();
+  shift @args;
+  my $module = shift @args;
+  my $modulefile = $module . '.pm';
+  $modulefile =~ s{::}{/}g;
+  eval { require $modulefile };
+  if ($@) {
+    croak "Memoize: Couldn't load hash tie module `$module': $@; aborting";
+  }
+#  eval  { import $module };
+#  if ($@) {
+#    croak "Memoize: Couldn't import hash tie module `$module': $@; aborting";
+#  }    
+#  eval "use $module ()";  
+#  if ($@) {
+#    croak "Memoize: Couldn't use hash tie module `$module': $@; aborting";
+#  }    
+  my $rc = (tie %$hash => $module, @args);
+  unless ($rc) {
+    croak "Memoize: Couldn't tie hash to `$module': $@; aborting";
+  }
+  1;
+}
+
+# This is the function that manages the memo tables.
+sub _memoizer {
+  my $orig = shift;		# stringized version of ref to original func.
+  my $info = $memotable{$orig};
+  my $normalizer = $info->{OPTIONS}{NORMALIZER} || \&_default_normalizer;
+  
+  # We should probably do this at memoize time instead of at call time
+  unless (ref $normalizer) {
+    unless ($normalizer =~ /::/) {
+      no strict;
+      $normalizer = \&{$info->{PACKAGE} . '::' . $normalizer};
+    }
+  }
+
+  my $argstr;
+  my $context = (wantarray() ? $LIST : $SCALAR);
+
+  # User requested FAULT option?
+  if ($info->{X}[$context]) {
+    my $funcname = $info->{NAME};
+    my $context = $context ? 'list' : 'scalar';
+    if (defined $funcname) {
+      croak "Function `$funcname' called in forbidden $context context; faulting";
+    } else {
+      croak "Anonymous function called in forbidden $context context; faulting";
+    }
+  }
+
+  { no strict;
+    if ($context == $SCALAR) {
+      $argstr = &{$normalizer}(@_);
+    } elsif ($context == $LIST) {
+      ($argstr) = &{$normalizer}(@_);
+    } else {
+      croak "Internal error \#41; context was neither \$LIST nor \$SCALAR\n";
+    }
+  }
+  if ($context == $SCALAR) {
+    if (exists $info->{MEMOS}[$SCALAR]{$argstr}) {
+      return $info->{MEMOS}[$SCALAR]{$argstr};
+    } else {
+      my $val = &{$info->{UNMEMOIZED}}(@_);
+      # Scalars are considered to be lists; store appropriately
+      if ($info->{OPTIONS}{SCALAR_CACHE} eq 'MERGE') {
+	$info->{MEMOS}[$SCALAR]{$argstr} = [$val];
+      } else {
+	$info->{MEMOS}[$SCALAR]{$argstr} = $val;
+      }
+      $val;
+    }
+  } elsif ($context == $LIST) {
+    if (exists $info->{MEMOS}[$LIST]{$argstr}) {
+      my $val = $info->{MEMOS}[$LIST]{$argstr};
+      return ($val) unless ref $val eq 'ARRAY';
+      # An array ref is ambiguous. Did the function really return 
+      # an array ref?  Or did we cache a list-context list return in
+      # an anonymous array?
+      # If LISTCONTEXT=>MERGE, then the function never returns lists,
+      # so we know for sure:
+      return ($val) if $info->{OPTIONS}{LIST_CACHE} eq 'MERGE';
+      # Otherwise, we're doomed.  ###BUG
+      return @$val;
+    } else {
+      my $q = $info->{MEMOS}[$LIST]{$argstr} = [&{$info->{UNMEMOIZED}}(@_)];
+      @$q;
+    }
+  } else {
+    croak "Internal error \#42; context was neither \$LIST nor \$SCALAR\n";
+  }
+}
+
+sub _default_normalizer {
+  join $;,@_;			# $;,@_;? Perl is great.
+}
+
+sub unmemoize {
+  my $f = shift;
+  my $uppack = caller;
+  my $cref = _make_cref($f, $uppack);
+
+  unless (exists $revmemotable{$cref}) {
+    croak "Could not unmemoize function `$f', because it was not memoized to begin with";
+  }
+  
+  my $tabent = $memotable{$revmemotable{$cref}};
+  unless (defined $tabent) {
+    croak "Could not figure out how to unmemoize function `$f'";
+  }
+  my $name = $tabent->{NAME};
+  if (defined $name) {
+    no strict;
+    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
+    *{$name} = $tabent->{UNMEMOIZED}; # Replace with original function
+  }
+  undef $memotable{$revmemotable{$cref}};
+  undef $revmemotable{$cref};
+
+  # This removes the last reference to the (possibly tied) memo tables
+  # my ($old_function, $memotabs) = @{$tabent}{'UNMEMOIZED','MEMOS'};
+  # undef $tabent; 
+
+#  # Untie the memo tables if they were tied.
+#  my $i;
+#  for $i (0,1) {
+#    if (tied %{$memotabs->[$i]}) {
+#      warn "Untying hash #$i\n";
+#      untie %{$memotabs->[$i]};
+#    }
+#  }
+
+  $tabent->{UNMEMOIZED};
+}
+
+sub _make_cref {
+  my $fn = shift;
+  my $uppack = shift;
+  my $cref;
+  my $name;
+
+  if (ref $fn eq 'CODE') {
+    $cref = $fn;
+  } elsif (! ref $fn) {
+    if ($fn =~ /::/) {
+      $name = $fn;
+    } else {
+      $name = $uppack . '::' . $fn;
+    }
+    no strict;
+    if (defined $name and !defined(&$name)) {
+      croak "Cannot memoize nonexistent function `$fn'";
+    }
+#    $cref = \&$name;
+    $cref = *{$name}{CODE};
+  } else {
+    my $parent = (caller(1))[3]; # Function that called _make_cref
+    croak "Usage: argument 1 to `$parent' must be a function name or reference.\n";
+  }
+  $DEBUG and warn "${name}($fn) => $cref in _make_cref\n";
+  $cref;
+}
+
+1;
+
+
+
+
 
 =head1 NAME
 
@@ -25,9 +333,14 @@ Memoize - Make your functions faster by trading space for time
 
 =head1 DESCRIPTION
 
-`Memoizing' a function makes it faster by trading space for time.
-Here is an example.  Consider the Fibonacci sequence, defined by the
-following function:
+`Memoizing' a function makes it faster by trading space for time.  It
+does this by cacheing the return values of the function in a table.
+If you call the function again with the same arguments, C<memoize>
+jmups in and gives you the value out of the table, instead of letting
+the function compute the value all over again.
+
+Here is an extreme example.  Consider the Fibonacci sequence, defined
+by the following function:
 
 	# Compute Fibonacci numbers
 	sub fib {
@@ -47,22 +360,16 @@ much recomputing of old results that it takes a really long time to
 run---fib(14) makes 1,200 extra recursive calls to itself, to compute
 and recompute things that it already computed.
 
-This function is a good candidate for memoization.  Whenever a
-memoized function computes a result, it saves the result in a table.
-Then, if you ask the function to do the same work later, it just gives
-you the answer that was in the table, instead of computing it all over
-again.
-
-This module will automatically memoize functions for you.  For
-example, if you memoize the `fib' function above, it will compute
-fib(14) exactly once, the first time it needs to, and then save the
-result in a table.  Then if you ask for fib(14) again, it gives you
-the result out of the table.  While computing fib(14), instead of
-computing fib(12) twice, it does it once; the second time it needs
-the value it gets it from the table.  It doesn't compute fib(11) four
-times; it computes it once, getting it from the table the next three
-times.  Instead of making 1,200 recursive calls to `fib', it makes
-15.  This makes the function about 150 times faster.
+This function is a good candidate for memoization.  If you memoize the
+`fib' function above, it will compute fib(14) exactly once, the first
+time it needs to, and then save the result in a table.  Then if you
+ask for fib(14) again, it gives you the result out of the table.
+While computing fib(14), instead of computing fib(12) twice, it does
+it once; the second time it needs the value it gets it from the table.
+It doesn't compute fib(11) four times; it computes it once, getting it
+from the table the next three times.  Instead of making 1,200
+recursive calls to `fib', it makes 15.  This makes the function about
+150 times faster.
 
 You could do the memoization yourself, by rewriting the function, like
 this:
@@ -150,7 +457,7 @@ C<INSTALL> option it would have replaced the old C<fib> with the
 memoized version.  
 
 To prevent C<memoize> from installing the memoized version anywhere, use
-C<INSTALL => undef>.
+C<INSTALL =E<gt> undef>.
 
 =head2 NORMALIZER
 
@@ -469,6 +776,8 @@ cache table on disk in an C<SDBM_File> database:
                 SCALAR_CACHE => 
                 [TIE, Memoize::SDBM_File, $filename, O_RDWR|O_CREAT, 0666];
 
+C<NDBM_File> has the same problem and the same solution.
+
 C<Storable> isn't a tied hash class at all.  You can use it to store a
 hash to disk and retrieve it again, but yu can't modify the hash while
 it's on the disk.  So if you want to store your cache table in a
@@ -476,7 +785,7 @@ C<Storable> database, use C<Memoize::Storable>, which puts a hashlike
 front-end onto C<Storable>.  The hash table is actually kept in
 memory, and is loaded from your C<Storable> file at the time you
 memoize the function, and stored back at the time you unmemoize the
-function:
+function (or when your program exits):
 
 	memoize 'function', 
                 SCALAR_CACHE => [TIE, Memoize::Storable, $filename];
@@ -516,308 +825,4 @@ To join a mailing list for announcements about C<Memoize>, send an
 empty message to C<mjd-perl-memoize-request@plover.com>.
 
 =cut
-
-
-
-#
-# Usage memoize(functionname/ref,
-#               { NORMALIZER => coderef, INSTALL => name,
-#                 LIST_CACHE => descriptor, SCALAR_CACHE => descriptor }
-#
-
-use Carp;
-use Exporter;
-use vars qw($DEBUG);
-@ISA = qw(Exporter);
-@EXPORT = qw(memoize);
-@EXPORT_OK = qw(unmemoize);
-use strict;
-
-my %memotable;
-my %revmemotable;
-my ($SCALAR, $LIST) = (0, 1);	# Constants
-my @CONTEXT_TAGS = qw(MERGE TIE MEMORY FAULT);
-my %IS_CACHE_TAG = map {($_ => 1)} @CONTEXT_TAGS;
-
-sub memoize {
-  my $fn = shift;
-  my %options = @_;
-  my $options = \%options;
-  
-  unless (defined($fn) && 
-	  (ref $fn eq 'CODE' || ref $fn eq '')) {
-    croak "Usage: memoize 'functionname'|coderef {OPTIONS}";
-  }
-
-  my $uppack = caller;		# TCL me Elmo!
-  my $cref;			# Code reference to original function
-  my $name = (ref $fn ? undef : $fn);
-
-  # Convert function names to code references
-  $cref = &_make_cref($fn, $uppack);
-
-  # Goto considered harmful!  Hee hee hee.  
-  my $wrapper = eval "sub { unshift \@_, qq{$cref}; goto &_memoizer; }";
-
-  my $install_name;
-  if (defined $options->{INSTALL}) {
-    # INSTALL => name
-    $install_name = $options->{INSTALL};
-  } elsif (! exists $options->{INSTALL}) {
-    # No INSTALL option provided; use original name if possible
-    $install_name = $name;
-  } else {
-    # INSTALL => undef  means don't install
-  }
-
-  if (defined $install_name) {
-    $install_name = $uppack . '::' . $install_name
-	unless $install_name =~ /::/;
-    no strict;
-    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
-    *{$install_name} = $wrapper; # Install memoized version
-  }
-
-  $revmemotable{$wrapper} = "" . $cref; # Turn code ref into hash key
-
-  # These will be the caches!
-  my $scalars = {};
-  my $lists = {};
-
-  # Now deal with the TODISK options
-  {
-    my $context;
-    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
-      my $tag = $options{$context};
-      next unless defined $tag;
-      unless (   ref $tag eq '' 
-	      || ref $tag eq 'ARRAY') {
-	croak "Argument of $context must be either string, or array ref; aborting";
-      }
-      $tag = (ref $tag eq 'ARRAY') ? $tag->[0] : $tag;
-      unless ($IS_CACHE_TAG{$tag}) {
-	croak "Unrecognized option to `$context': `$tag' should be one of (@CONTEXT_TAGS); aborting";
-      }
-    }
-
-    # Handle `MERGE'
-    {
-      local($^W) = 0;  # Shut up `uninitialized value' warnings
-      my ($so, $lo) = @options{qw(SCALAR_CACHE LIST_CACHE)};
-      $so = $so->[0] if ref $so;
-      $lo = $lo->[0] if ref $lo;
-      
-      # Funny thing here that they both mean the same!
-      # If there were three contexts, they wouldn't.
-      if ($so eq 'MERGE' || $lo eq 'MERGE') {
-	$lists = $scalars;	# Alias them together
-      } 
-    }
-    
-    foreach $context (qw(SCALAR_CACHE LIST_CACHE)) {
-      my $hash = ($context eq 'SCALAR_CACHE') ? $scalars : $lists;
-      # If the option wasn't `TIE', this call does nothing.
-      _my_tie($context, $hash, $options);  # Croaks on failure
-      $options{$context} ||= '';
-    }
-  }
-  
-  # We should put some more stuff in here eventually.
-  # We've been saying that for serveral versions now.
-  # And you know what?  More stuff keeps going in!
-  $memotable{$cref} = 
-  {
-    OPTIONS => $options,
-    UNMEMOIZED => $cref,
-    MEMOIZED => $wrapper,
-    PACKAGE => $uppack,
-    NAME => $install_name,
-    MEMOS => [ $scalars, $lists ],		# Memo tables 
-
-    # This gets a short name because we check it on every call
-    # It says which contexts are forbidden
-    X => [map {exists $options{$_} && $options{$_} eq 'FAULT'} 
-	  qw(SCALAR_CACHE LIST_CACHE)
-	 ],
-  };
-
-  $wrapper			# Return just memoized version
-}
-
-# This function tries to load a tied hash class and tie the hash to it.
-sub _my_tie {
-  my ($context, $hash, $options) = @_;
-  my $fullopt = $options->{$context};
-
-  # We already checked to make sure that this works.
-  my $shortopt = (ref $fullopt) ? $fullopt->[0] : $fullopt;
-  
-  return unless defined $shortopt && $shortopt eq 'TIE';
-
-  my @args = ref $fullopt ? @$fullopt : ();
-  shift @args;
-  my $module = shift @args;
-  my $modulefile = $module . '.pm';
-  $modulefile =~ s{::}{/}g;
-  eval { require $modulefile };
-  if ($@) {
-    croak "Memoize: Couldn't load hash tie module `$module': $@; aborting";
-  }
-#  eval  { import $module };
-#  if ($@) {
-#    croak "Memoize: Couldn't import hash tie module `$module': $@; aborting";
-#  }    
-#  eval "use $module ()";  
-#  if ($@) {
-#    croak "Memoize: Couldn't use hash tie module `$module': $@; aborting";
-#  }    
-  my $rc = (tie %$hash => $module, @args);
-  unless ($rc) {
-    croak "Memoize: Couldn't tie hash to `$module': $@; aborting";
-  }
-  1;
-}
-
-# This is the function that manages the memo tables.
-sub _memoizer {
-  my $orig = shift;		# stringized version of ref to original func.
-  my $info = $memotable{$orig};
-  my $normalizer = $info->{OPTIONS}{NORMALIZER} || \&_default_normalizer;
-  
-  # We should probably do this at memoize time instead of at call time
-  unless (ref $normalizer) {
-    unless ($normalizer =~ /::/) {
-      no strict;
-      $normalizer = \&{$info->{PACKAGE} . '::' . $normalizer};
-    }
-  }
-
-  my $argstr;
-  my $context = (wantarray() ? $LIST : $SCALAR);
-
-  # User requested FAULT option?
-  if ($info->{X}[$context]) {
-    my $funcname = $info->{NAME};
-    my $context = $context ? 'list' : 'scalar';
-    if (defined $funcname) {
-      croak "Function `$funcname' called in forbidden $context context; faulting";
-    } else {
-      croak "Anonymous function called in forbidden $context context; faulting";
-    }
-  }
-
-  { no strict;
-    if ($context == $SCALAR) {
-      $argstr = &{$normalizer}(@_);
-    } elsif ($context == $LIST) {
-      ($argstr) = &{$normalizer}(@_);
-    } else {
-      croak "Internal error \#41; context was neither \$LIST nor \$SCALAR\n";
-    }
-  }
-  if ($context == $SCALAR) {
-    if (exists $info->{MEMOS}[$SCALAR]{$argstr}) {
-      return $info->{MEMOS}[$SCALAR]{$argstr};
-    } else {
-      my $val = &{$info->{UNMEMOIZED}}(@_);
-      # Scalars are considered to be lists; store appropriately
-      if ($info->{OPTIONS}{SCALAR_CACHE} eq 'MERGE') {
-	$info->{MEMOS}[$SCALAR]{$argstr} = [$val];
-      } else {
-	$info->{MEMOS}[$SCALAR]{$argstr} = $val;
-      }
-      $val;
-    }
-  } elsif ($context == $LIST) {
-    if (exists $info->{MEMOS}[$LIST]{$argstr}) {
-      my $val = $info->{MEMOS}[$LIST]{$argstr};
-      return ($val) unless ref $val eq 'ARRAY';
-      # An array ref is ambiguous. Did the function really return 
-      # an array ref?  Or did we cache a list-context list return in
-      # an anonymous array?
-      # If LISTCONTEXT=>MERGE, then the function never returns lists,
-      # so we know for sure:
-      return ($val) if $info->{OPTIONS}{LIST_CACHE} eq 'MERGE';
-      # Otherwise, we're doomed.  ###BUG
-      return @$val;
-    } else {
-      my $q = $info->{MEMOS}[$LIST]{$argstr} = [&{$info->{UNMEMOIZED}}(@_)];
-      @$q;
-    }
-  } else {
-    croak "Internal error \#42; context was neither \$LIST nor \$SCALAR\n";
-  }
-}
-
-sub _default_normalizer {
-  join $;,@_;			# $;,@_;? Perl is great.
-}
-
-sub unmemoize {
-  my $f = shift;
-  my $uppack = caller;
-  my $cref = _make_cref($f, $uppack);
-
-  unless (exists $revmemotable{$cref}) {
-    croak "Could not unmemoize function `$f', because it was not memoized to begin with";
-  }
-  
-  my $tabent = $memotable{$revmemotable{$cref}};
-  unless (defined $tabent) {
-    croak "Could not figure out how to unmemoize function `$f'";
-  }
-  my $name = $tabent->{NAME};
-  if (defined $name) {
-    no strict;
-    local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
-    *{$name} = $tabent->{UNMEMOIZED}; # Replace with original function
-  }
-  undef $memotable{$revmemotable{$cref}};
-  undef $revmemotable{$cref};
-
-  # This removes the last reference to the (possibly tied) memo tables
-  # my ($old_function, $memotabs) = @{$tabent}{'UNMEMOIZED','MEMOS'};
-  # undef $tabent; 
-
-#  # Untie the memo tables if they were tied.
-#  my $i;
-#  for $i (0,1) {
-#    if (tied %{$memotabs->[$i]}) {
-#      warn "Untying hash #$i\n";
-#      untie %{$memotabs->[$i]};
-#    }
-#  }
-
-  $tabent->{UNMEMOIZED};
-}
-
-sub _make_cref {
-  my $fn = shift;
-  my $uppack = shift;
-  my $cref;
-  my $name;
-
-  if (ref $fn eq 'CODE') {
-    $cref = $fn;
-  } elsif (! ref $fn) {
-    if ($fn =~ /::/) {
-      $name = $fn;
-    } else {
-      $name = $uppack . '::' . $fn;
-    }
-    no strict;
-    if (defined $name and !defined(&$name)) {
-      croak "Cannot memoize nonexistent function `$fn'";
-    }
-#    $cref = \&$name;
-    $cref = *{$name}{CODE};
-  } else {
-    my $parent = (caller(1))[3]; # Function that called _make_cref
-    croak "Usage: argument 1 to `$parent' must be a function name or reference.\n";
-  }
-  $DEBUG and warn "${name}($fn) => $cref in _make_cref\n";
-  $cref;
-}
-
-1;
 

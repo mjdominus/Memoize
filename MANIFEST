@@ -4,6 +4,8 @@ MANIFEST
 Memoize.pm
 Makefile.PL
 Memoize/SDBM_File.pm
+Memoize/NDBM_File.pm
+Memoize/AnyDBM_File.pm
 Memoize/Storable.pm
 t/correctness.t
 t/array.t
@@ -14,6 +16,8 @@ t/unmemoize.t
 t/tie.t
 t/tiefeatures.t
 t/tie_gdbm.t
+t/tie_sdbm.t
+t/tie_ndbm.t
 t/tie_storable.t
 demo.pl
 demo2.pl

@@ -3,6 +3,8 @@
 use lib qw(. ..);
 use Memoize 0.45 qw(memoize unmemoize);
 use Fcntl;
+# use Memoize::GDBM_File;
+# $Memoize::GDBM_File::Verbose = 0;
 
 sub i {
   $_[0];

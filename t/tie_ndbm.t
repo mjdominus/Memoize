@@ -3,6 +3,8 @@
 use lib qw(. ..);
 use Memoize 0.45 qw(memoize unmemoize);
 use Fcntl;
+# use Memoize::NDBM_File;
+# $Memoize::NDBM_File::Verbose = 0;
 
 sub i {
   $_[0];
@@ -18,7 +20,7 @@ sub n {
   $_[0]+1;
 }
 
-eval {require GDBM_File};
+eval {require Memoize::NDBM_File};
 if ($@) {
   print "1..0\n";
   exit 0;
@@ -28,7 +30,7 @@ print "1..4\n";
 
 $file = '/tmp/ms.db';
 unlink $file, "$file.dir", "$file.pag";
-tryout('GDBM_File', $file, 1);  # Test 1..4
+tryout('Memoize::NDBM_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";
 
 sub tryout {

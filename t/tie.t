@@ -3,8 +3,7 @@
 use lib qw(. ..);
 use Memoize 0.45 qw(memoize unmemoize);
 use Fcntl;
-use Memoize::SDBM_File;
-$Memoize::SDBM_File::Verbose = 0;
+use Memoize::AnyDBM_File;
 
 print "1..4\n";
 
@@ -24,7 +23,7 @@ sub n {
 
 $file = '/tmp/ms.db';
 unlink $file, "$file.dir", "$file.pag";
-tryout('Memoize::SDBM_File', $file, 1);  # Test 1..4
+tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";
 
 sub tryout {
