@@ -2,13 +2,13 @@
 <HEAD>
 <TITLE>Bricolage: Memoization</TITLE>
 <LINK REV="made" HREF="mailto:mjd-perl-tpj@plover.com">
-<BASE HREF="http://www.plover.com/~mjd/perl/MiniMemoize/memoize.html">
+<BASE HREF="http://perl.plover.com/MiniMemoize/memoize.html">
 </HEAD>
 
 <BODY BGCOLOR=white>
 
 <p align=right><font size=-1>&copy; Copyright 1999 The Perl Journal.  Reprinted with permission.</font></p>
-
+	
 <!-- INDEX BEGIN -->
 
 <UL>
@@ -74,7 +74,7 @@ the lengthy calculation. If not, it computes them, installs them in
 the data structure, and returns them to the caller.
 
 <P>
-Caching therefore trades space for time. A function wioth caching may run
+Caching therefore trades space for time. A function with caching may run
 faster than one without, but it uses up more memory. The basic strategy
 looks like this:
 
@@ -96,7 +96,7 @@ Then you call <CODE>fake_function</CODE> instead of <CODE>real_function</CODE> a
 
 <P>
 Obviously this is inappropriate for many functions. For example, you
-wouldn't like it if the `time' or `rand' function use caching, because then
+wouldn't like it if the `time' or `rand' functions used caching, because then
 they would return the same time or the same random number every time you
 called them. But for many functions the result depends only on the
 arguments, and not on anything in the outside world like the time of day.
@@ -144,7 +144,7 @@ the cache. When we compute
 13        }
 </PRE>
 <P>
-Line 1 sets up the cache array; the <CODE>my</CODE> confines it to the block the ends on line 13, so it's only visible to the <CODE>factorial</CODE> function. After the function gets the argument on line 4, it checks on line
+Line 1 sets up the cache array; the <CODE>my</CODE> confines it to the block that ends on line 13, so it's only visible to the <CODE>factorial</CODE> function. After the function gets the argument on line 3, it checks on line
 4 to see if it already knows the factorial. If so, it returns the result
 immediately. 
 
@@ -170,7 +170,7 @@ used before.
 <P>
 Here's an example where memoizing turns into a huge win for this reason:
 The <EM>Fibonacci</EM> function. In 1202 the Italian mathematician Leonardo of Pisa, also called
-`Fibonacci', asked how quickly a colony of immportal rabbits would increase
+`Fibonacci', asked how quickly a colony of immortal rabbits would increase
 if every month each pair of adult rabbits spawned a new baby pair that took
 another month to grow up to be adults themselves.
 
@@ -539,7 +539,7 @@ could perform without thinking, and we certainly did meet the goal.
 Storing the cache in memory is handy and can speed up a function. But when
 your process exits, the cache is lost. Since the function is pure, its
 values will be the same from run to run of the program, and it's a shame to
-have later invocation recompute the values that were already computed by
+have later invocations recompute the values that were already computed by
 earlier invocations.
 
 <P>
@@ -813,7 +813,7 @@ cached value in a hash, keyed by
 <P>
 In this case, the two arguments to <CODE>T()</CODE> are a reference to a list of numbers, and a target sum. When we use the
 reference in the <CODE>join</CODE>
-statement, we get something like <CODE>&quot;ARRAY(0xae050)&quot;</CODE>. These string are always different for different arrays, even if the
+statement, we get something like <CODE>&quot;ARRAY(0xae050)&quot;</CODE>. These strings are always different for different arrays, even if the
 contents of the arrays are the same. This means that <CODE>_check_cache</CODE> can't tell that the arguments are the same even when they are.
 
 <P>
@@ -917,7 +917,7 @@ Sometimes there are exceptions to these perils. For example, the
 <TT>gethostbyname()</TT> function often takes a long time, because Perl has to open a network
 socket, send data to the name server, and wait for the reply to come back.
 Memoizing <TT>gethostbyname()</TT> is technically incorrect, because the address data <EM>might</EM> change between calls. But in practice, address data doesn't change very
-quickly, abd memoizing <TT>gethostbyname()</TT> doesn't lead to any real problems except in long-running programs.
+quickly, and memoizing <TT>gethostbyname()</TT> doesn't lead to any real problems except in long-running programs.
 
 <P>
 <HR>
@@ -953,14 +953,14 @@ HREF="http://www.plover.com/~mjd/perl/MiniMemoize/">http://www.plover.com/~mjd/p
 
 <img src="../pics/small-sigils.gif" align=right>
 <p>Return to: 
-<a href="../../">Universe of Discourse main page</a> |
-<a href="../../whatsnew.html">What's new page</a> |
+<a href="http://www.plover.com/~mjd/">Universe of Discourse main page</a> |
+<a href="http://www.plover.com/~mjd/whatsnew.html">What's new page</a> |
 <a href="../">Perl Paraphernalia</a>|
 <a href="../Memoize/"><tt>Memoize.pm</tt> Page</a>|
 <a href="./">Memoization Page</a>
 </p>
 
-<p><a href="mailto:mjd-tpj-huffman@plover.com">mjd-tpj-huffman@plover.com</a></p>
+<p><a href="mailto:mjd-tpj-memoize+@plover.com">mjd-tpj-memoize+@plover.com</a></p>
 
 </BODY>
 

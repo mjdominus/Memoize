@@ -5,7 +5,7 @@ use Memoize;
 
 print "1..25\n";
 
-print "Basic\n";
+print "# Basic\n";
 
 # A function that should only be called once.
 { my $COUNT = 0;
@@ -49,7 +49,7 @@ $c4 = &$f();			# Call original version again
 print (($c4 == 13) ? "ok 12\n" : "not ok 12\n");
 print $FAIL ? "ok 13\n" : "not ok 13\n";	# Did we get the original?
 
-print "Fibonacci\n";
+print "# Fibonacci\n";
 
 sub mt1 {			# Fibonacci
   my $n = shift;
@@ -83,7 +83,7 @@ for ($i=0; $i<3; $i++) {
 
 
 
-print "Normalizers\n";
+print "# Normalizers\n";
 
 sub fake_normalize {
   return '';
@@ -111,7 +111,7 @@ print (("@f2r" eq "1 1 1 1 1 1 1 1 1 1") ? "ok $n\n" : "not ok $n\n");
 $n++;
 print (("@f3r" eq "1 1 1 1 1 1 1 1 1 1") ? "ok $n\n" : "not ok $n\n");
 
-print "INSTALL => undef option.\n";
+print "# INSTALL => undef option.\n";
 { my $i = 1;
   sub u1 { $i++ }
 }
@@ -125,4 +125,5 @@ print (("@u1r" eq "2 3 4") ? "ok $n\n" : "not ok $n\n"); # Increment thrice
 $n++;
 print ((defined &{"undef"}) ? "not ok $n\n" : "ok $n\n"); # Just in case
 
-print "$n tests in all.\n";
+print "# $n tests in all.\n";
+

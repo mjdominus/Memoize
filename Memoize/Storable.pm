@@ -1,6 +1,17 @@
-
 package Memoize::Storable;
+
+=head1 NAME
+
+Memoize::Storable - store Memoized data in Storable database
+
+=head1 DESCRIPTION
+
+See L<Memoize>.
+
+=cut
+
 use Storable ();
+$VERSION = 0.65;
 $Verbose = 0;
 
 sub TIEHASH {

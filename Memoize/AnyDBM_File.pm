@@ -1,6 +1,17 @@
 package Memoize::AnyDBM_File;
 
-use vars qw(@ISA);
+=head1 NAME
+
+Memoize::AnyDBM_File - glue to provide EXISTS for AnyDBM_File for Storable use
+
+=head1 DESCRIPTION
+
+See L<Memoize>.
+
+=cut
+
+use vars qw(@ISA $VERSION);
+$VERSION = 0.65;
 @ISA = qw(DB_File GDBM_File Memoize::NDBM_File Memoize::SDBM_File ODBM_File) unless @ISA;
 
 my $verbose = 1;

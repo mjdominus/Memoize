@@ -3,15 +3,15 @@
 #
 # Transparent memoization of idempotent functions
 #
-# Copyright 1998, 1999 M-J. Dominus.
+# Copyright 1998, 1999, 2000, 2001 M-J. Dominus.
 # You may copy and distribute this program under the
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize+@plover.com for a license.
 #
-# Version 0.62 beta $Revision: 1.17 $ $Date: 2000/10/24 04:33:49 $
+# Version 0.65 beta $Revision: 1.17 $ $Date: 2000/10/24 04:33:49 $
 
 package Memoize;
-$VERSION = '0.62';
+$VERSION = '0.65';
 
 # Compile-time constants
 sub SCALAR () { 0 } 
@@ -27,6 +27,7 @@ sub LIST () { 1 }
 use Carp;
 use Exporter;
 use vars qw($DEBUG);
+use Config;                     # Dammit.
 @ISA = qw(Exporter);
 @EXPORT = qw(memoize);
 @EXPORT_OK = qw(unmemoize flush_cache);
@@ -64,18 +65,15 @@ sub memoize {
   if (defined $proto) { $proto = "($proto)" }
   else { $proto = "" }
 
-  # Goto considered harmful!  Hee hee hee.  
-  my $wrapper = eval "sub $proto { unshift \@_, qq{$cref}; goto &_memoizer; }";
-  # Actually I would like to get rid of the eval, but there seems not
-  # to be any other way to set the prototype properly.
-
-# --- THREADED PERL COMMENT ---
-# The above line might not work under threaded perl because goto & 
-# semantics are broken.  If that's the case, try the following instead:
-#  my $wrapper = eval "sub { &_memoizer(qq{$cref}, \@_); }";
-# Confirmed 1998-12-27 this does work.
-# 1998-12-29: Sarathy says this bug is fixed in 5.005_54.
-# However, the module still fails, although the sample test program doesn't.
+  # I would like to get rid of the eval, but there seems not to be any
+  # other way to set the prototype properly.  The switch here for
+  # 'usethreads' works around a bug in threadperl having to do with
+  # magic goto.  It would be better to fix the bug and use the magic
+  # goto version everywhere.
+  my $wrapper = 
+      $Config{usethreads} 
+        ? eval "sub $proto { &_memoizer(\$cref, \@_); }" 
+        : eval "sub $proto { unshift \@_, \$cref; goto &_memoizer; }";
 
   my $normalizer = $options{NORMALIZER};
   if (defined $normalizer  && ! ref $normalizer) {
@@ -118,7 +116,12 @@ sub memoize {
     if ($cache_opt eq 'FAULT') { # no cache
       $caches{$context} = undef;
     } elsif ($cache_opt eq 'HASH') { # user-supplied hash
-      $caches{$context} = $cache_opt_args[0];
+      my $cache = $cache_opt_args[0];
+      my $package = ref(tied %$cache);
+      if ($context eq 'LIST' && $scalar_only{$package}) {
+        croak("You can't use $package for LIST_CACHE because it can only store scalars");
+      }
+      $caches{$context} = $cache;
     } elsif ($cache_opt eq '' ||  $IS_CACHE_TAG{$cache_opt}) {
       # default is that we make up an in-memory hash
       $caches{$context} = {};
@@ -173,6 +176,8 @@ sub _my_tie {
   my $shortopt = (ref $fullopt) ? $fullopt->[0] : $fullopt;
   
   return unless defined $shortopt && $shortopt eq 'TIE';
+  carp("TIE option to memoize() is deprecated; use HASH instead") if $^W;
+
 
   my @args = ref $fullopt ? @$fullopt : ();
   shift @args;
@@ -186,17 +191,9 @@ sub _my_tie {
   if ($@) {
     croak "Memoize: Couldn't load hash tie module `$module': $@; aborting";
   }
-#  eval  { import $module };
-#  if ($@) {
-#    croak "Memoize: Couldn't import hash tie module `$module': $@; aborting";
-#  }    
-#  eval "use $module ()";  
-#  if ($@) {
-#    croak "Memoize: Couldn't use hash tie module `$module': $@; aborting";
-#  }    
   my $rc = (tie %$hash => $module, @args);
   unless ($rc) {
-    croak "Memoize: Couldn't tie hash to `$module': $@; aborting";
+    croak "Memoize: Couldn't tie hash to `$module': $!; aborting";
   }
   1;
 }
@@ -237,12 +234,13 @@ sub _memoizer {
       croak "Internal error \#41; context was neither LIST nor SCALAR\n";
     }
   } else {                      # Default normalizer
-    $argstr = join $;,@_;       # $;,@_;? Perl is great.
+    local $^W = 0;
+    $argstr = join chr(28),@_;  
   }
 
   if ($context == SCALAR) {
     my $cache = $info->{S};
-    _crap_out($info->{NAME}, 'scalar') unless defined $cache;
+    _crap_out($info->{NAME}, 'scalar') unless $cache;
     if (exists $cache->{$argstr}) { 
       return $cache->{$argstr};
     } else {
@@ -257,17 +255,15 @@ sub _memoizer {
     }
   } elsif ($context == LIST) {
     my $cache = $info->{L};
-    _crap_out($info->{NAME}, 'list') unless defined $cache;
+    _crap_out($info->{NAME}, 'list') unless $cache;
     if (exists $cache->{$argstr}) {
       my $val = $cache->{$argstr};
-      return ($val) unless ref $val eq 'ARRAY';
-      # An array ref is ambiguous. Did the function really return 
-      # an array ref?  Or did we cache a list-context list return in
-      # an anonymous array?
       # If LISTCONTEXT=>MERGE, then the function never returns lists,
-      # so we know for sure:
+      # so we have a scalar value cached, so just return it straightaway:
       return ($val) if $info->{O}{LIST_CACHE} eq 'MERGE';
-      # Otherwise, we're doomed.  ###BUG
+      # Maybe in a later version we can use a faster test.
+
+      # Otherwise, we cached an array containing the returned list:
       return @$val;
     } else {
       my $q = $cache->{$argstr} = [&{$info->{U}}(@_)];
@@ -380,13 +376,11 @@ Options include:
 	INSTALL => new_name
 
 	SCALAR_CACHE => 'MEMORY'
-	SCALAR_CACHE => ['TIE', Module, arguments...]
         SCALAR_CACHE => ['HASH', \%cache_hash ]
 	SCALAR_CACHE => 'FAULT'
 	SCALAR_CACHE => 'MERGE'
 
 	LIST_CACHE => 'MEMORY'
-	LIST_CACHE => ['TIE', Module, arguments...]
         LIST_CACHE => ['HASH', \%cache_hash ]
 	LIST_CACHE => 'FAULT'
 	LIST_CACHE => 'MERGE'
@@ -577,19 +571,21 @@ argument lists look different.
 
 The default normalizer just concatenates the arguments with C<$;> in
 between.  This always works correctly for functions with only one
-argument, and also when the arguments never contain C<$;> (which is
-normally character #28, control-\.  )  However, it can confuse certain
-argument lists:
+string argument, and also when the arguments never contain C<$;>
+(which is normally character #28, control-\.  )  However, it can
+confuse certain argument lists:
 
 	normalizer("a\034", "b")
 	normalizer("a", "\034b")
 	normalizer("a\034\034b")
 
-for example.
+for example.  
 
-The default normalizer also won't work when the function's arguments
-are references.  For exampple, consider a function C<g> which gets two
-arguments: A number, and a reference to an array of numbers:
+Since hash keys are strings, the default normalizer will not
+distinguish between C<undef> and the empty string.  It also won't work
+when the function's arguments are references.  For example, consider
+a function C<g> which gets two arguments: A number, and a reference to
+an array of numbers:
 
 	g(13, [1,2,3,4,5,6,7]);
 
@@ -649,16 +645,15 @@ its value is cached in the other hash.  You can control the caching
 behavior of both contexts independently with these options.
 
 The argument to C<LIST_CACHE> or C<SCALAR_CACHE> must either be one of
-the following five strings:
+the following four strings:
 
 	MEMORY
-	TIE
 	FAULT
 	MERGE
         HASH                                                           
 
 or else it must be a reference to a list whose first element is one of
-these four strings, such as C<[TIE, arguments...]>.
+these four strings, such as C<[HASH, arguments...]>.
 
 =over 4
 
@@ -668,43 +663,45 @@ C<MEMORY> means that return values from the function will be cached in
 an ordinary Perl hash variable.  The hash variable will not persist
 after the program exits.  This is the default.
 
-=item C<TIE>
-
-C<TIE> means that the function's return values will be cached in a
-tied hash.  A tied hash can have any semantics at all.  It is
-typically tied to an on-disk database, so that cached values are
-stored in the database and retrieved from it again when needed, and
-the disk file typically persists after your pogram has exited.  
-
-If C<TIE> is specified as the first element of a list, the remaining
-list elements are taken as arguments to the C<tie> call that sets up
-the tied hash.  For example,
-
-	SCALAR_CACHE => [TIE, DB_File, $filename, O_RDWR | O_CREAT, 0666]
-
-says to tie the hash into the C<DB_File> package, and to pass the
-C<$filename>, C<O_RDWR | O_CREAT>, and C<0666> arguments to the C<tie>
-call.  This has the effect of storing the cache in a C<DB_File>
-database whose name is in C<$filename>.
-
-Other typical uses of C<TIE>:
-
-	LIST_CACHE => [TIE, GDBM_File, $filename, O_RDWR | O_CREAT, 0666]
-	SCALAR_CACHE => [TIE, MLDBM, DB_File, $filename, O_RDWR|O_CREAT, 0666]
-	LIST_CACHE => [TIE, My_Package, $tablename, $key_field, $val_field]
-
-This last might tie the cache hash to a package that you wrote
-yourself that stores the cache in a SQL-accessible database.
-A useful use of this feature: You can construct a batch program that
-runs in the background and populates the memo table, and then when you
-come to run your real program the memoized function will be
-screamingly fast because all its results have been precomputed. 
-
 =item C<HASH>
 
 C<HASH> allows you to specify that a particular hash that you supply
 will be used as the cache.  You can tie this hash beforehand to give
 it any behavior you want.
+
+A tied hash can have any semantics at all.  It is typically tied to an
+on-disk database, so that cached values are stored in the database and
+retrieved from it again when needed, and the disk file typically
+persists after your program has exited.  See C<perltie> for more
+complete details about C<tie>.
+
+A typical example is:
+
+        use DB_File; 
+        tie my %cache => 'DB_File', $filename, O_RDWR|O_CREAT, 0666;
+        memoize 'function', SCALAR_CACHE => [HASH => \%cache];
+
+This has the effect of storing the cache in a C<DB_File> database
+whose name is in C<$filename>.  The cache will persist after the
+program has exited.  Next time the program runs, it will find the
+cache already populated from the previous run of the program.  Or you
+can forcibly populate the cache by constructing a batch program that
+runs in the background and populates the cache file.  Then when you
+come to run your real program the memoized function will be fast
+because all its results have been precomputed.
+
+=item C<TIE>
+
+This option is B<strongly deprecated> and will be removed
+in the B<next> release of C<Memoize>.  Use the C<HASH> option instead.
+
+        memoize ... [TIE, ARGS...]
+
+is merely a shortcut for
+
+        tie my %cache, ARGS...;
+        memoize ... [HASH => \%cache];
+
 
 =item C<FAULT>
 
@@ -752,9 +749,11 @@ stored in the same disk file; this saves you from having to deal with
 two disk files instead of one.  You can use a normalizer function to
 keep the two sets of return values separate.  For example:
 
+        tie my %cache => 'MLDBM', 'DB_File', $filename, ...;
+
 	memoize 'myfunc',
 	  NORMALIZER => 'n',
-	  SCALAR_CACHE => [TIE, MLDBM, DB_File, $filename, ...],
+	  SCALAR_CACHE => [HASH => \%cache],
 	  LIST_CACHE => MERGE,
 	;
 
@@ -895,6 +894,25 @@ will modify $u2 as well as $u1, because both variables are references
 to the same array.  Had C<getusers> not been memoized, $u1 and $u2
 would have referred to different arrays.
 
+=item * 
+
+Do not memoize a very simple function.
+
+Recently someone mentioned to me that the Memoize module made his
+program run slower instead of faster.  It turned out that he was
+memoizing the following function:
+
+    sub square {
+      $_[0] * $_[0];
+    }
+
+I pointed out that C<Memoize> uses a hash, and that looking up a
+number in the hash is necessarily going to take a lot longer than a
+single multiplication.  There really is no way to speed up the
+C<square> function.
+
+Memoization is not magical.
+
 =back
 
 =head1 PERSISTENT CACHE SUPPORT
@@ -903,8 +921,8 @@ You can tie the cache tables to any sort of tied hash that you want
 to, as long as it supports C<TIEHASH>, C<FETCH>, C<STORE>, and
 C<EXISTS>.  For example,
 
-	memoize 'function', SCALAR_CACHE => 
-                            [TIE, GDBM_File, $filename, O_RDWR|O_CREAT, 0666];
+        tie my %cache => 'GDBM_File', $filename, O_RDWR|O_CREAT, 0666;
+        memoize 'function', SCALAR_CACHE => [HASH => \%cache];
 
 works just fine.  For some storage methods, you need a little glue.
 
@@ -913,11 +931,11 @@ package is a glue module called C<Memoize::SDBM_File> which does
 provide one.  Use this instead of plain C<SDBM_File> to store your
 cache table on disk in an C<SDBM_File> database:
 
-	memoize 'function', 
-                SCALAR_CACHE => 
-                [TIE, Memoize::SDBM_File, $filename, O_RDWR|O_CREAT, 0666];
+        tie my %cache => 'Memoize::SDBM_File', $filename, O_RDWR|O_CREAT, 0666;
+        memoize 'function', SCALAR_CACHE => [HASH => \%cache];
 
-C<NDBM_File> has the same problem and the same solution.
+C<NDBM_File> has the same problem and the same solution.  (Use
+C<Memoize::NDBM_File instead of plain NDBM_File.>)
 
 C<Storable> isn't a tied hash class at all.  You can use it to store a
 hash to disk and retrieve it again, but you can't modify the hash while
@@ -928,11 +946,11 @@ memory, and is loaded from your C<Storable> file at the time you
 memoize the function, and stored back at the time you unmemoize the
 function (or when your program exits):
 
-	memoize 'function', 
-                SCALAR_CACHE => [TIE, Memoize::Storable, $filename];
+        tie my %cache => 'Memoize::Storable', $filename;
+	memoize 'function', SCALAR_CACHE => [HASH => \%cache];
 
-	memoize 'function', 
-                SCALAR_CACHE => [TIE, Memoize::Storable, $filename, 'nstore'];
+        tie my %cache => 'Memoize::Storable', $filename, 'nstore';
+	memoize 'function', SCALAR_CACHE => [HASH => \%cache];
 
 Include the `nstore' option to have the C<Storable> database written
 in `network order'.  (See L<Storable> for more details about this.)
@@ -942,7 +960,9 @@ in `network order'.  (See L<Storable> for more details about this.)
 See Memoize::Expire, which is a plug-in module that adds expiration
 functionality to Memoize.  If you don't like the kinds of policies
 that Memoize::Expire implements, it is easy to write your own plug-in
-module to implement whatever policy you desire.
+module to implement whatever policy you desire.  Memoize comes with
+several examples.  An expiration manager that implements a LRU policy
+is available on CPAN as Memoize::ExpireLRU.
 
 =head1 BUGS
 
@@ -985,22 +1005,33 @@ empty message to C<mjd-perl-memoize-request@plover.com>.  This mailing
 list is for announcements only and has extremely low traffic---about
 four messages per year.
 
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 1998, 1999, 2000, 2001  by Mark Jason Dominus
+
+This library is free software; you may redistribute it and/or modify
+it under the same terms as Perl itself. 
+
 =head1 THANK YOU
 
 Many thanks to Jonathan Roy for bug reports and suggestions, to
 Michael Schwern for other bug reports and patches, to Mike Cariaso for
 helping me to figure out the Right Thing to Do About Expiration, to
 Joshua Gerth, Joshua Chamas, Jonathan Roy, Mark D. Anderson, and
-Andrew Johnson for more suggestions about expiration, to Ariel
-Scolnikov for delightful messages about the Fibonacci function, to
-Dion Almaer for thought-provoking suggestions about the default
-normalizer, to Walt Mankowski and Kurt Starsinic for much help
-investigating problems under threaded Perl, to Alex Dudkevich for
-reporting the bug in prototyped functions and for checking my patch,
-to Tony Bass for many helpful suggestions, to Philippe Verdret for
-enlightening discussion of Hook::PrePostCall, to Nat Torkington for
-advice I ignored, to Chris Nandor for portability advice, to Randal
-Schwartz for suggesting the 'C<flush_cache> function, and to Jenda
-Krynicky for being a light in the world.
+Andrew Johnson for more suggestions about expiration, to Brent Powers
+for the Memoize::ExpireLRU module, to Ariel Scolnicov for delightful
+messages about the Fibonacci function, to Dion Almaer for
+thought-provoking suggestions about the default normalizer, to Walt
+Mankowski and Kurt Starsinic for much help investigating problems
+under threaded Perl, to Alex Dudkevich for reporting the bug in
+prototyped functions and for checking my patch, to Tony Bass for many
+helpful suggestions, to Philippe Verdret for enlightening discussion
+of Hook::PrePostCall, to Nat Torkington for advice I ignored, to Chris
+Nandor for portability advice, to Randal Schwartz for suggesting the
+'C<flush_cache> function, and to Jenda Krynicky for being a light in
+the world.
 
+Special thanks to Jarkko Hietaniemi, the 5.8.0 pumpking, for including
+this module in the core and for his patient and helpful guidance
+during the integration process.
 =cut
