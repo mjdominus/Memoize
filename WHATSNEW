@@ -1,0 +1,19 @@
+
+Calling syntax is now
+
+	memoize(function, OPTION1 => VALUE1, ...) 
+
+instead of
+
+	memoize(function, { OPTION1 => VALUE1, ... }) 
+
+
+Functions that return lists can now be memoized.
+
+New tests for list-returning functions and their normalizers.
+
+Various documentation changes.
+
+Return value from `unmemoize' is now the resulting unmemoized
+function, instead of the constant `1'.  It was already docmuented to
+do so. 

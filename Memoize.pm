@@ -8,10 +8,10 @@
 # same terms as Perl iteself.  If in doubt, write to mjd@pobox.com
 # for a license.
 #
-# Version 0.05 alpha $Revision: 1.3 $ $Date: 1998/02/05 03:26:25 $
+# Version 0.06 alpha $Revision: 1.5 $ $Date: 1998/02/23 16:31:22 $
 
 package Memoize;
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 =head1 NAME
 
@@ -128,10 +128,10 @@ There are some optional options you can pass to C<memoize> to change
 the way it behaves a little.  To supply options, invoke C<memoize>
 like this:
 
-	memoize(function, { TODISK => filename,
-	                    NORMALIZER => function,
-			    INSTALL => newname
-			  });
+	memoize(function, TODISK => filename,
+	                  NORMALIZER => function,
+			  INSTALL => newname
+			 );
 
 Each of these three options is optional; you can include some, all, or
 none of them.
@@ -142,7 +142,7 @@ If you supply a function name with C<INSTALL>, memoize will install
 the new, memoized version of the function under the name you give.
 For example, 
 
-	memoize('fib', { INSTALL => 'fastfib' })
+	memoize('fib', INSTALL => 'fastfib')
 
 installs the memoized version of C<fib> as C<fastfib>; without the
 C<INSTALL> option it would have replaced the old C<fib> with the
@@ -194,6 +194,10 @@ function looking exactly the same, like this:
 
 	OUCH^\B^\2^\C^\7
 
+You would tell C<Memoize> to use this normalizer this way:
+
+	memoize('f', NORMALIZER => 'normalize_f');
+
 C<memoize> knows that if the normalized version of the arguments is
 the same for two argument lists, then it can safely look up the value
 that it computed for one argument list and return it as the result of
@@ -206,15 +210,23 @@ argument, and also when the arguments never contain C<$;> (which is
 normally character #28, control-\.  )  However, it can confuse certain
 argument lists:
 
-	normalizer("a$;", "b")
-	normalizer("a", "$;b")
+	normalizer("a\034", "b")
+	normalizer("a", "\034b")
+	normalizer("a\034\034b")
 
 for example.
+
+The calling context of the function (scalar or list context) is
+propagated to the normalizer.  This means that if the memoized
+function will treat its arguments differently in list context than it
+would in scalar context, you can have the normalizer function select
+its behavior based on the results of C<wantarray>.  Even if called in
+a list context, a normalizer should still return a single string.
 
 =head2 TODISK
 
 C<TODISK> means that the memo table should be saved to disk so that it
-will persist between invokations of your program.  If you use this
+will persist between invocations of your program.  If you use this
 option, future runs of your program will get immediate benefit from
 the results computed by earlier runs.  A useful use of this feature:
 You can construct a batch program that runs in the background and
@@ -250,19 +262,17 @@ Memoization is not a cure-all:
 
 Do not memoize a function whose behavior depends on program
 state other than its own arguments, such as global variables, the time
-of day, or file input.  These functions whill not produce correct
+of day, or file input.  These functions will not produce correct
 results when memoized.  For a particularly easy example:
 
 	sub f {
-	  my $i = <STDIN>;
-	  chomp $i;	
-	  $i;
+	  time;
 	}
 
 This function takes no arguments, and as far as C<Memoize> is
 concerned, it always returns the same result.  C<Memoize> is wrong, of
-course, and the memoized version of this function will read STDIN once
-to get a string from the user, and it will return that same string
+course, and the memoized version of this function will call C<time> once
+to get the current time, and it will return that same time
 every time you call it after that.
 
 =item *
@@ -353,10 +363,12 @@ use strict;
 
 my %memotable;
 my %revmemotable;
+my ($SCALAR, $LIST) = (0, 1);	# Constants
 
 sub memoize {
   my $fn = shift;
-  my $options = shift || {};
+  my %options = @_;
+  my $options = \%options;
   
   unless (defined($fn) && 
 	  (ref $fn eq 'CODE' || ref $fn eq '')) {
@@ -399,8 +411,8 @@ sub memoize {
     UNMEMOIZED => $cref,
     MEMOIZED => $wrapper,
     PACKAGE => $uppack,
-    NAME => $install_name,	# What was this supposed to be for?
-    MEMOS => { },		# Memo table
+    NAME => $install_name,
+    MEMOS => [ { }, { } ],		# Memo tables 
   };
 
   $revmemotable{$wrapper} = "" . $cref; # Turn code ref into hash key
@@ -423,14 +435,32 @@ sub _memoizer {
   }
 
   my $argstr;
+  my $context = (wantarray() ? $LIST : $SCALAR);
   { no strict;
-    $argstr = &{$normalizer}(@_);
+    if ($context == $SCALAR) {
+      $argstr = &{$normalizer}(@_);
+    } elsif ($context == $LIST) {
+      ($argstr) = &{$normalizer}(@_);
+    } else {
+      croak "Internal error \#41; context was neither \$LIST nor \$SCALAR\n";
+    }
   }
-  if (exists $info->{MEMOS}{$argstr}) {
-    return $info->{MEMOS}{$argstr};
-  } 
-
-  $info->{MEMOS}{$argstr} = &{$info->{UNMEMOIZED}}(@_);
+  if ($context == $SCALAR) {
+    if (exists $info->{MEMOS}[$SCALAR]{$argstr}) {
+      return $info->{MEMOS}[$SCALAR]{$argstr};
+    } else {
+      $info->{MEMOS}[$SCALAR]{$argstr} = &{$info->{UNMEMOIZED}}(@_);
+    }
+  } elsif ($context == $LIST) {
+    if (exists $info->{MEMOS}[$LIST]{$argstr}) {
+      return @{$info->{MEMOS}[$LIST]{$argstr}};
+    } else {
+      my $q = $info->{MEMOS}[$LIST]{$argstr} = [&{$info->{UNMEMOIZED}}(@_)];
+      @$q;
+    }
+  } else {
+    croak "Internal error \#42; context was neither \$LIST nor \$SCALAR\n";
+  }
 }
 
 sub _default_normalizer {
@@ -458,7 +488,6 @@ sub unmemoize {
   undef $memotable{$revmemotable{$cref}};
   undef $revmemotable{$cref};
   $tabent->{UNMEMOIZED};
-  1;
 }
 
 sub _make_cref {

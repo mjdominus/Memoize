@@ -1,19 +1,8 @@
+# Version 0.05 alpha $Revision: 1.4 $ $Date: 1998/02/19 06:20:59 $
+
 =head1 TO DO
 
 =over 4
-
-=item *
-
-The module does not work at all for functions that return lists.
-It should have a RETURN_TYPE option that accepts SCALAR, LIST, and
-BOTH and defaults to BOTH.  The memo hash can be doubled somehow with
-one hash for (references to) lists and one for scalars.
-
-Don't forget to add array value tests to the test suite.
-
-=item *
-
-There should be an C<unmemoize> function.
 
 =item *
 
@@ -73,10 +62,29 @@ Well, I did add the ColorToRGB example, but it's still not so good.
 These examples need a lot of work.  C<factorial> might be a better
 example than C<fibo>.  
 
-=item * 
+=item *
+
+Add more regression tests for normalizers.
+
+=item *
+
+Maybe resolve normalizer function to code-ref at memoize time instead
+of at function call time for efficiency?  I think there was some
+reason not to do this, but I can't remember what it was.
+
+=item *
+
+Add more array value tests to the test suite.
+
+=item *
+
+Fix that `Subroutine u rededined ... line 484' message. 
+
+=item *
 
 There was probably some other stuff that I forgot.
 
 
 
 =back
+

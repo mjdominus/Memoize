@@ -1,9 +1,12 @@
 README
+WHATSNEW
 MANIFEST
 Memoize.pm
 Makefile.PL
 t/correctness.t
+t/array.t
 t/speed.t
+t/normalize.t
 t/errors.t
 t/unmemoize.t
 demo.pl

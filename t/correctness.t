@@ -35,7 +35,7 @@ print (($c2 == 12) ? "ok 5\n" : "not ok 5\n");
 print $FAIL ? "not ok 6\n" : "ok 6\n";	# Was it really memoized?
 
 $f = do { my $COUNT = 0; sub { $FAIL++ if $COUNT++; 13 } };
-$fm = memoize($f, {INSTALL => 'another'});
+$fm = memoize($f, INSTALL => 'another');
 
 $c1 = &another();  # Was it really installed?
 print (($c1 == 13) ? "ok 7\n" : "not ok 7\n");
@@ -99,8 +99,8 @@ sub f3 {
   return shift;
 }
 &memoize('f1');
-&memoize('f2', {NORMALIZER => 'fake_normalize'});
-&memoize('f3', {NORMALIZER => \&fake_normalize});
+&memoize('f2', NORMALIZER => 'fake_normalize');
+&memoize('f3', NORMALIZER => \&fake_normalize);
 @f1r = map { f1($_) } (1 .. 10);
 @f2r = map { f2($_) } (1 .. 10);
 @f3r = map { f3($_) } (1 .. 10);
@@ -115,7 +115,7 @@ print "INSTALL => undef option.\n";
 { my $i = 1;
   sub u1 { $i++ }
 }
-my $um = memoize('u1', {INSTALL => undef});
+my $um = memoize('u1', INSTALL => undef);
 @umr = (&$um, &$um, &$um);
 @u1r = (&u1,  &u1,  &u1 );	# Did *not* clobber &u1
 $n++;
