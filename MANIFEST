@@ -8,6 +8,7 @@ Memoize/NDBM_File.pm
 Memoize/AnyDBM_File.pm
 Memoize/Storable.pm
 t/correctness.t
+t/prototype.t
 t/array.t
 t/speed.t
 t/normalize.t

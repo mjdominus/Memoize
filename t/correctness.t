@@ -126,5 +126,3 @@ $n++;
 print ((defined &{"undef"}) ? "not ok $n\n" : "ok $n\n"); # Just in case
 
 print "$n tests in all.\n";
-
-

@@ -3,25 +3,24 @@
 use lib 'blib/lib';
 use Memoize 0.45 qw(memoize unmemoize);
 use Fcntl;
-use Memoize::SDBM_File;
 
 # print STDERR $INC{'Memoize.pm'}, "\n";
 
 print "1..6\n";
 
 # Test MERGE
-sub x {
+sub xx {
   wantarray();
 }
 
-my $s = x();
+my $s = xx();
 print ((!$s) ? "ok 1\n" : "not ok 1\n");
-my ($a) = x();
+my ($a) = xx();
 print (($a) ? "ok 2\n" : "not ok 2\n");
-memoize 'x', LIST_CACHE => MERGE;
-$s = x();
+memoize 'xx', LIST_CACHE => MERGE;
+$s = xx();
 print ((!$s) ? "ok 3\n" : "not ok 3\n");
-($a) = x();  # Should return cached false value from previous invocation
+($a) = xx();  # Should return cached false value from previous invocation
 print ((!$a) ? "ok 4\n" : "not ok 4\n");
 
 

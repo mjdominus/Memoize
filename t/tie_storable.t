@@ -3,8 +3,8 @@
 
 use lib qw(. ..);
 use Memoize 0.45 qw(memoize unmemoize);
-use Memoize::Storable;
-$Memoize::Storable::Verbose = 0;
+# use Memoize::Storable;
+# $Memoize::Storable::Verbose = 0;
 
 sub i {
   $_[0];

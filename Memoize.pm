@@ -8,10 +8,10 @@
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize@plover.com for a license.
 #
-# Version 0.47 beta $Revision: 1.11 $ $Date: 1998/09/15 05:00:10 $
+# Version 0.48 beta $Revision: 1.13 $ $Date: 1999/01/15 20:04:34 $
 
 package Memoize;
-$VERSION = '0.47';
+$VERSION = '0.48';
 
 
 
@@ -52,8 +52,20 @@ sub memoize {
   # Convert function names to code references
   $cref = &_make_cref($fn, $uppack);
 
+  # Locate function prototype, if any
+  my $proto = prototype $cref;
+  if (defined $proto) { $proto = "($proto)" }
+  else { $proto = "" }
+
   # Goto considered harmful!  Hee hee hee.  
-  my $wrapper = eval "sub { unshift \@_, qq{$cref}; goto &_memoizer; }";
+  my $wrapper = eval "sub $proto { unshift \@_, qq{$cref}; goto &_memoizer; }";
+# --- THREADED PERL COMMENT ---
+# The above might not work under threaded perl because goto & semantics are
+# broken.  If that's the case, try the following:
+#  my $wrapper = eval "sub { &_memoizer(qq{$cref}, \@_); }";
+# Confirmed 1998-12-27 this does work.
+# 1998-12-29: Sarathy says this bug is fixed in 5.005_54.
+# However, the module still fails, although the sample test program doesn't.
 
   my $install_name;
   if (defined $options->{INSTALL}) {
@@ -794,12 +806,25 @@ function (or when your program exits):
                 SCALAR_CACHE => [TIE, Memoize::Storable, $filename, 'nstore'];
 
 Include the `nstore' option to have the C<Storable> database written
-in `network order'.  (See L<Storable> for moer details about this.)
+in `network order'.  (See L<Storable> for more details about this.)
 
 =head1 MY BUGS
 
 Needs a better test suite, especially for the tied stuff.
-That is why the version number is 0.46 instead of 0.50.
+
+Also, there is some problem with the way C<goto &f> works under
+threaded Perl, because of the lexical scoping of C<@_>.  This is a bug
+in Perl, and until it is resolved, Memoize won't work with these
+Perls.  To fix it, you need to chop the source code a little.  Find
+the comment in the source code that says C<--- THREADED PERL
+COMMENT---> and comment out the active line and uncomment the
+commented one.  Then try it again.
+
+I wish I could investigate this threaded Perl problem.  If someone
+could lend me an account on a machine with threaded Perl for a few
+hours, it would be very helpful.
+
+That is why the version number is 0.48 instead of 1.00.
 
 =head1 MAILING LIST
 

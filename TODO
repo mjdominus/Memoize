@@ -164,6 +164,37 @@ Maybe the default for LIST_CACHE should be MERGE anyway.
 
 =item *
 
+There's some terrible bug probably related to use under threaded perl,
+possibly connected with line 56:
+
+    my $wrapper = eval "sub { unshift \@_, qq{$cref}; goto &_memoizer; }";
+
+I think becayse C<@_> is lexically scoped in threadperl, the effect of
+C<unshift> never makes it into C<_memoizer>.  That's probably a bug in
+Perl, but maybe I should work around it.   Can anyone provide more
+information here, or lend me a machine with threaded Perl where I can
+test this theory?  Line 59, currently commented out, may fix the
+problem.  
+
+=item * 
+
+What's the timeout stuff going to look like?
+
+	EXPIRE_TIME => time_in_sec
+	EXPIRE_USES => num_uses
+	MAXENTRIES => n
+
+perhaps?  Is EXPIRE_USES actually useful?
+
+=item *
+
+Maybe if the original function has a prototype, the module can use
+that to select the most appropriate default normalizer.  For example,
+if the prototype was C<($)>, there's no reason to use `join'.  If it's
+C<(\@)> then it can use C<join $;,@$_[0];> instead of C<join $;,@_;>.
+
+=item *
+
 There was probably some other stuff that I forgot.
 
 =back
