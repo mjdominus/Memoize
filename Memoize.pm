@@ -8,10 +8,10 @@
 # same terms as Perl iteself.  If in doubt, write to mjd@pobox.com
 # for a license.
 #
-# Version 0.03 alpha $Revision: 1.3 $ $Date: 1998/02/05 03:26:25 $
+# Version 0.05 alpha $Revision: 1.3 $ $Date: 1998/02/05 03:26:25 $
 
 package Memoize;
-$VERSION = '0.03';
+$VERSION = '0.05';
 
 =head1 NAME
 
