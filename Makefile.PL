@@ -31,7 +31,7 @@ neighborhood Perl hacker.
 
 WriteMakefile(
 	      NAME => 'Memoize',
-	      VERSION => '0.51',
+	      VERSION => '0.52',
 #	      'linkext' => {LINKTYPE => ''},
 	      'dist' => {COMPRESS => 'gzip', SUFFIX => 'gz'},
 );

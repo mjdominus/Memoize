@@ -8,6 +8,7 @@ Memoize/AnyDBM_File.pm
 Memoize/Storable.pm
 Memoize/Expire.pm
 Memoize/ExpireTest.pm
+Memoize/Saves.pm
 t/correctness.t
 t/prototype.t
 t/array.t

@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use lib qw(. ..);
-use Memoize 0.45 qw(memoize unmemoize);
+use Memoize 0.52 qw(memoize unmemoize);
 use Fcntl;
 use Memoize::AnyDBM_File;
 
@@ -39,8 +39,8 @@ $file = catfile($tmpdir, "md$$");
 }
 
 
-# tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
-tryout('DB_File', $file, 1);  # Test 1..4
+tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
+# tryout('DB_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";
 
 sub tryout {

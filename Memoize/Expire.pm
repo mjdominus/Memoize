@@ -179,7 +179,6 @@ free to write your own expiration policy module that implements
 whatever policy you desire.  Here is how to do that.  Let us suppose
 that your module will be named MyExpirePolicy.
 
-
 Short summary: You need to create a package that defines four methods:
 
 =over 4
@@ -282,7 +281,14 @@ entirely absent or was older than ten seconds.
 It's nice if you allow a C<TIE> argument to C<TIEHASH> that ties the
 underlying cache so that the user can specify that the cache is
 persistent or that it has some other interesting semantics.  The
-sample C<Memoize::Expire> module demonstrates how to do this.
+sample C<Memoize::Expire> module demonstrates how to do this.  It
+implements a policy that expires cache items when they get too old or
+when they have been accessed too many times.
+
+Another sample module, C<Memoize::Saves>, is included with this
+package.  It implements a policy that allows you to specify that
+certain function values whould always be looked up afresh.  See the
+documentation for details.
 
 =head1 ALTERNATIVES
 
