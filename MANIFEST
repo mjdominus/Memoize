@@ -24,6 +24,7 @@ t/tie_storable.t
 t/expire.t
 t/expire_module_n.t
 t/expire_module_t.t
+article.html
 demo.pl
 demo2.pl
 TODO

@@ -28,7 +28,11 @@ if ($@) {
 
 print "1..4\n";
 
-use File::Spec::Functions;
+if (eval {require File::Spec::Functions}) {
+ File::Spec::Functions->import();
+} else {
+  *catfile = sub { join '/', @_ };
+}
 $tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
 $file = catfile($tmpdir, "md$$");
 unlink $file, "$file.dir", "$file.pag";

@@ -3,6 +3,7 @@ package Memoize::Expire;
 # require 5.00556;
 use Carp;
 $DEBUG = 0;
+$VERSION = '0.51';
 
 # This package will implement expiration by prepending a fixed-length header
 # to the font of the cached data.  The format of the header will be:
@@ -114,7 +115,7 @@ sub _get_header  {
 
 # Below is the stub of documentation for your module. You better edit it!
 
-=head1 NAME - Memoize::Expire
+=head1 NAME 
 
 Memoize::Expire - Plug-in module for automatic expiration of memoized values
 
@@ -275,7 +276,7 @@ To use this expiration policy, the user would say
 	memoize 'function',
 	    SCALAR_CACHE => [TIE, Memoize::TenSecondExpire];
 
-Memoize would then call c<function> whenever a cached value was
+Memoize would then call C<function> whenever a cached value was
 entirely absent or was older than ten seconds.
 
 It's nice if you allow a C<TIE> argument to C<TIEHASH> that ties the

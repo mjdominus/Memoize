@@ -8,10 +8,10 @@
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize+@plover.com for a license.
 #
-# Version 0.49 beta $Revision: 1.13 $ $Date: 1999/01/15 20:04:34 $
+# Version 0.51 beta $Revision: 1.14 $ $Date: 1999/09/17 14:55:57 $
 
 package Memoize;
-$VERSION = '0.49';
+$VERSION = '0.51';
 
 
 
@@ -853,7 +853,7 @@ functionality to Memoize.  If you don't like the kinds of policies
 that Memoize::Expire implements, it is easy to write your own plug-in
 module to implement whatever policy you desire.
 
-=head1 MY BUGS
+=head1 BUGS
 
 Needs a better test suite, especially for the tied and expiration stuff.
 
@@ -869,7 +869,14 @@ I wish I could investigate this threaded Perl problem.  If someone
 could lend me an account on a machine with threaded Perl for a few
 hours, it would be very helpful.
 
-That is why the version number is 0.49 instead of 1.00.
+That is why the version number is 0.51 instead of 1.00.
+
+Here's a bug that isn't my fault: Some versions of C<DB_File> won't
+let you store data under a key of length 0.  That means that if you
+have a function C<f> which you memoized and the cache is in a
+C<DB_File> database, then the value of C<f()> (C<f> called with no
+arguments) will not be memoized.  Let us all breathe deeply and repeat
+this mantra: ``Gosh, Keith, that sure was a stupid thing to do.''
 
 =head1 MAILING LIST
 

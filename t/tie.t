@@ -11,6 +11,8 @@ sub i {
   $_[0];
 }
 
+$ARG = 'Keith Bostic is a pinhead';
+
 sub c119 { 119 }
 sub c7 { 7 }
 sub c43 { 43 }
@@ -21,8 +23,12 @@ sub n {
   $_[0]+1;
 }
 
-use File::Spec::Functions;
 $tmpdir = $ENV{TMP} || $ENV{TMPDIR} ||  '/tmp';  
+if (eval {require File::Spec::Functions}) {
+ File::Spec::Functions->import();
+} else {
+  *catfile = sub { join '/', @_ };
+}
 $file = catfile($tmpdir, "md$$");
 @files = ($file, "$file.db", "$file.dir", "$file.pag");
 { 
@@ -33,7 +39,8 @@ $file = catfile($tmpdir, "md$$");
 }
 
 
-tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
+# tryout('Memoize::AnyDBM_File', $file, 1);  # Test 1..4
+tryout('DB_File', $file, 1);  # Test 1..4
 unlink $file, "$file.dir", "$file.pag";
 
 sub tryout {
@@ -45,8 +52,8 @@ sub tryout {
   LIST_CACHE => 'FAULT'
     ;
 
-  my $t1 = c5();	
-  my $t2 = c5();	
+  my $t1 = c5($ARG);	
+  my $t2 = c5($ARG);	
   print (($t1 == 5) ? "ok $testno\n" : "not ok $testno\n");
   $testno++;
   print (($t2 == 5) ? "ok $testno\n" : "not ok $testno\n");
@@ -59,12 +66,12 @@ sub tryout {
   LIST_CACHE => 'FAULT'
     ;
   
-  my $t3 = c23();
-  my $t4 = c23();
+  my $t3 = c23($ARG);
+  my $t4 = c23($ARG);
   $testno++;
-  print (($t3 == 5) ? "ok $testno\n" : "not ok $testno\n");
+  print (($t3 == 5) ? "ok $testno\n" : "not ok $testno  #   Result $t3\n");
   $testno++;
-  print (($t4 == 5) ? "ok $testno\n" : "not ok $testno\n");
+  print (($t4 == 5) ? "ok $testno\n" : "not ok $testno  #   Result $t4\n");
   unmemoize 'c23';
 }
 
