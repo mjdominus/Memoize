@@ -1,4 +1,12 @@
 
+`TODISK' option appears at last!
+
+But it is a little more interesting than I originally imagined.
+
+See the manual for full details.
+
+################################
+
 Calling syntax is now
 
 	memoize(function, OPTION1 => VALUE1, ...) 

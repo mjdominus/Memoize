@@ -1,12 +1,27 @@
 
 Name:		Memoize
 What:		Transparently speed up functions by caching return values.
-Version:	0.06
+Version:	0.45
 Author:		Mark-Jason Dominus (mjd-perl-memoize@plover.com)
 
 ################################################################
 
 What's new since the previous release:
+
+Storage of cached function return values in a static file is now
+tentatively supported.  `memoize' now accepts new options SCALAR_CACHE
+and LIST_CACHE to specify the destination and protocol for saving
+cached values to disk.
+
+Consider these features alpha, and please report bugs to
+mjd-perl-memoize@plover.com.  The beta version is awaiting a more
+complete test suite.
+
+Much new documentation to support all this.
+
+################################################################
+
+What's new since 0.05:
 
 Calling syntax is now
 
