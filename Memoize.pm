@@ -8,7 +8,7 @@
 # same terms as Perl iteself.  If in doubt, write to mjd@pobox.com
 # for a license.
 #
-# Version 0.03 alpha $Revision: 1.2 $ $Date: 1998/02/04 22:04:03 $
+# Version 0.03 alpha $Revision: 1.3 $ $Date: 1998/02/05 03:26:25 $
 
 package Memoize;
 $VERSION = '0.03';
@@ -86,6 +86,23 @@ Or you could use this module, like this:
 
 This makes it easy to turn memoizing on and off.
 
+Here's an even simpler example: I wrote a simple ray tracer; the
+program would look in a certain direction, figure out what it was
+looking at, and then convert the `color' value (typically a string
+like `red') of that object to a red, green, and blue pixel value, like
+this:
+
+    for ($direction = 0; $direction < 300; $direction++) {
+      # Figure out which object is in direction $direction
+      $color = $object->{color};
+      ($r, $g, $b) = @{&ColorToRGB($color)};
+      ...
+    }
+
+Since there are relatively few objects in a picture, there are only a
+few colors, which get looked up over and over again.  Memoizing
+C<ColorToRGB> speeded up the program by several percent.
+
 =head1 DETAILS
 
 This module exports exactly one function, C<memoize>.  The rest of the
@@ -97,7 +114,9 @@ You should say
 
 where C<function> is the name of the function you want to memoize, or
 a reference to it.  C<memoize> returns a reference to the new,
-memoized version of the function.
+memoized version of the function, or C<undef> on a non-fatal error.
+At present, there are no non-fatal errors, but there might be some in
+the future.
 
 If C<function> was the name of a function, then C<memoize> hides the
 old version and installs the new memoized version under the old name,
@@ -106,7 +125,7 @@ so that C<&function(...)> actually invokes the memoized version.
 =head1 OPTIONS
 
 There are some optional options you can pass to C<memoize> to change
-the way it behaves a little.  To supply options, invokdle C<memoize>
+the way it behaves a little.  To supply options, invoke C<memoize>
 like this:
 
 	memoize(function, { TODISK => filename,
@@ -123,7 +142,7 @@ If you supply a function name with C<INSTALL>, memoize will install
 the new, memoized version of the function under the name you give.
 For example, 
 
-	memoize('fib', INSTALL => 'fastfib')
+	memoize('fib', { INSTALL => 'fastfib' })
 
 installs the memoized version of C<fib> as C<fastfib>; without the
 C<INSTALL> option it would have replaced the old C<fib> with the
@@ -181,6 +200,17 @@ that it computed for one argument list and return it as the result of
 calling the function with the other argmuent list, even if the
 argument lists look different.
 
+The default normalizer just concatenates the arguments with C<$;> in
+between.  This always works correctly for functions with only one
+argument, and also when the arguments never contain C<$;> (which is
+normally character #28, control-\.  )  However, it can confuse certain
+argument lists:
+
+	normalizer("a$;", "b")
+	normalizer("a", "$;b")
+
+for example.
+
 =head2 TODISK
 
 C<TODISK> means that the memo table should be saved to disk so that it
@@ -193,6 +223,22 @@ program the memoized function will be screamingly fast because al lits
 results have been precomputed.  Or you would be able to do this, if
 TODISK were implemented, which it presently isn't.  But it will be.
 Some day.  
+
+=head1 OTHER FUNCTION
+
+There's an C<unmemoize> function that you can import if you want to.
+If you use it, please let me know what it was good for, since I can
+only think of very limited uses for it and was considering leaving it
+out altogether.
+
+It accepts a reference to, or the name of a previously memoized
+function, and undoes whatever it did to provide the memoized version
+in the first place, including making the name refer to the unmemoized
+version if appropriate.  It returns a reference to the unmemoized
+version of the function.
+
+If you ask it to unmemoize a function that was never memoized, it
+croaks.
 
 =head1 CAVEATS
 
@@ -231,9 +277,9 @@ Do not memoize a function with side effects.
 
 This function accepts two arguments, adds them, and prints their sum.
 Its return value is the numuber of characters it printed, but you
-probably didn't care abuot that.  But C<Memoize> doesn't understand
+probably didn't care about that.  But C<Memoize> doesn't understand
 that.  If you memoize this function, you will get the result you
-expect the first time you ask it to prnit the sum of 2 and 3, but
+expect the first time you ask it to print the sum of 2 and 3, but
 subsequent calls will return the number 11 (the return value of
 C<print>) without actually printing anything.
 
@@ -272,43 +318,6 @@ and shorter every time you call C<main>.
 
 =back
 
-=head1 TO DO
-
-=over 4
-
-=item *
-
-There should be an C<unmemoize> function.
-
-=item *
-
-We should extend the benchmarking module to allow
-
-	timethis(main, MEMOIZED => [ suba, subb ])
-
-What would this do?  It would time C<main> three times, once with
-C<suba> and C<subb> unmemoized, twice with them memoized.
-
-Why would you want to do this?  By the third set of runs, the memo
-tables would be fully populated, so all calls by C<main> to C<suba>
-and C<subb> wuold return immediately.  You would be able to see how
-much of C<main>'s running time was due to time spent computing in
-C<suba> and C<subb>.  If that was just a little time, you would know
-that optimizing or improving C<suba> and C<subb> would not have a
-large effect on the performance of C<main>.  But if there was a big
-difference, you would know that C<suba> or C<subb> was a good
-candidate for optimization if you needed to make C<main> go faster.
-
-=item * 
-
-There was some other stuff, but I forget.
-
-=item * 
-
-Maybe a tied-hash interface to the memo-table, which a hook to
-      automatically populate an entry if no value is there yet?
-
-=back
 
 =head1 AUTHOR
 
@@ -336,40 +345,52 @@ for news and upgrades.
 
 use Carp;
 use Exporter;
+use vars qw($DEBUG);
 @ISA = qw(Exporter);
 @EXPORT = qw(memoize);
+@EXPORT_OK = qw(unmemoize);
 use strict;
 
 my %memotable;
+my %revmemotable;
 
 sub memoize {
   my $fn = shift;
   my $options = shift || {};
   
-  unless (defined($fn)) {
+  unless (defined($fn) && 
+	  (ref $fn eq 'CODE' || ref $fn eq '')) {
     croak "Usage: memoize 'functionname'|coderef {OPTIONS}";
   }
 
   my $uppack = caller;
   my $cref;			# Code reference to original function
-  my $name;
+  my $name = (ref $fn ? undef : $fn);
 
-  if (ref $fn eq 'CODE') {
-    $cref = $fn;
-  } elsif (! ref $fn) {
-    if ($fn =~ /::/) {
-      $name = $fn;
-    } else {
-      $name = $uppack . '::' . $fn;
-    }
-    no strict;
-    $cref = *{$name}{CODE}; # Magic
-  } else {
-    croak "Usage: argument 1 to `memoize' must be a function name or reference.\n";
-  }
+  # Convert function names to code references
+  $cref = &_make_cref($fn, $uppack);
 
   # Goto considered harmful!  Hee hee hee.  
   my $wrapper = eval "sub { unshift \@_, qq{$cref}; goto &_memoizer; }";
+
+  my $install_name;
+  if (defined $options->{INSTALL}) {
+    # INSTALL => name
+    $install_name = $options->{INSTALL};
+  } elsif (! exists $options->{INSTALL}) {
+    # No INSTALL option provided; use original name if possible
+    $install_name = $name;
+  } else {
+    # INSTALL => undef  means don't install
+  }
+
+  if (defined $install_name) {
+    $install_name = $uppack . '::' . $install_name
+	unless $install_name =~ /::/;
+    no strict;
+    local($) = 0;	       # ``Subroutine $install_name redefined at ...''
+    *{$install_name} = $wrapper; # Install memoized version
+  }
 
   # We should put some more stuff in here eventually.
   $memotable{$cref} = 
@@ -378,20 +399,13 @@ sub memoize {
     UNMEMOIZED => $cref,
     MEMOIZED => $wrapper,
     PACKAGE => $uppack,
-    NAME => undef,		# What was this supposed to be for?
+    NAME => $install_name,	# What was this supposed to be for?
     MEMOS => { },		# Memo table
   };
+
+  $revmemotable{$wrapper} = "" . $cref; # Turn code ref into hash key
   
-  my $install_name = $options->{INSTALL} || $name;
-  if (defined $install_name) {
-    $install_name = $uppack . '::' . $install_name
-	unless $install_name =~ /::/;
-    no strict;
-    local($) = 0;	       # ``Subroutine $install_name redefined at ...''
-    *{$install_name} = $wrapper; # Install memoized version
-  }
-  
-  $wrapper;			# Return memoized version
+  $wrapper			# Return just memoized version
 }
 
 # This is the function that manages the memo tables.
@@ -404,7 +418,7 @@ sub _memoizer {
   unless (ref $normalizer) {
     unless ($normalizer =~ /::/) {
       no strict;
-      $normalizer = *{$info->{PACKAGE} . '::' . $normalizer}{CODE};
+      $normalizer = \&{$info->{PACKAGE} . '::' . $normalizer};
     }
   }
 
@@ -421,6 +435,58 @@ sub _memoizer {
 
 sub _default_normalizer {
   join $;,@_;			# $;,@_;? Perl is great.
+}
+
+sub unmemoize {
+  my $f = shift;
+  my $uppack = caller;
+  my $cref = _make_cref($f, $uppack);
+
+  unless (exists $revmemotable{$cref}) {
+    croak "Could not unmemoize function `$f', because it was not memoized to begin with";
+  }
+  
+  my $tabent = $memotable{$revmemotable{$cref}};
+  unless (defined $tabent) {
+    croak "Could not figure out how to unmemoize function `$f'";
+  }
+  my $name = $tabent->{NAME};
+  if (defined $name) {
+    no strict;
+    *{$name} = $tabent->{UNMEMOIZED}; # Replace with original function
+  }
+  undef $memotable{$revmemotable{$cref}};
+  undef $revmemotable{$cref};
+  $tabent->{UNMEMOIZED};
+  1;
+}
+
+sub _make_cref {
+  my $fn = shift;
+  my $uppack = shift;
+  my $cref;
+  my $name;
+
+  if (ref $fn eq 'CODE') {
+    $cref = $fn;
+  } elsif (! ref $fn) {
+    if ($fn =~ /::/) {
+      $name = $fn;
+    } else {
+      $name = $uppack . '::' . $fn;
+    }
+    no strict;
+    if (defined $name and !defined(&$name)) {
+      croak "Cannot memoize nonexistent function `$fn'";
+    }
+#    $cref = \&$name;
+    $cref = *{$name}{CODE};
+  } else {
+    my $parent = (caller(1))[3]; # Function that called _make_cref
+    croak "Usage: argument 1 to `$parent' must be a function name or reference.\n";
+  }
+  $DEBUG and warn "${name}($fn) => $cref in _make_cref\n";
+  $cref;
 }
 
 1;

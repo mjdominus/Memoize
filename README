@@ -1,0 +1,13 @@
+
+Documentation for this module is in the module file itself; see
+`Memoize.pm'.  This is true for all Perl modules.  To display it, 
+try 
+
+	perldoc Memoize.pm
+
+or just view Memoize.pm with any text viewer or editor.
+
+Author:  Mark-Jason Dominus (mjd-perl-memoize@plover.com)
+
+Date: 17 February 1998
+

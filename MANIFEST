@@ -1,7 +1,11 @@
-Memoize.pm
-demo.pl
-demo2.pl
-Makefile.PL
+README
 MANIFEST
+Memoize.pm
+Makefile.PL
 t/correctness.t
 t/speed.t
+t/errors.t
+t/unmemoize.t
+demo.pl
+demo2.pl
+TODO

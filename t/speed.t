@@ -3,7 +3,7 @@
 use lib '..';
 use Memoize;
 
-print STDERR "Warning: I'm testing the speedup.  This might take up to sixty seconds.\n";
+print STDERR "\nWarning: I'm testing the speedup.  This might take up to sixty seconds.\n                    ";
 
 print "1..6\n";
 

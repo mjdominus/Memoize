@@ -1,0 +1,82 @@
+=head1 TO DO
+
+=over 4
+
+=item *
+
+The module does not work at all for functions that return lists.
+It should have a RETURN_TYPE option that accepts SCALAR, LIST, and
+BOTH and defaults to BOTH.  The memo hash can be doubled somehow with
+one hash for (references to) lists and one for scalars.
+
+Don't forget to add array value tests to the test suite.
+
+=item *
+
+There should be an C<unmemoize> function.
+
+=item *
+
+We should extend the benchmarking module to allow
+
+	timethis(main, { MEMOIZED => [ suba, subb ] })
+
+What would this do?  It would time C<main> three times, once with
+C<suba> and C<subb> unmemoized, twice with them memoized.
+
+Why would you want to do this?  By the third set of runs, the memo
+tables would be fully populated, so all calls by C<main> to C<suba>
+and C<subb> would return immediately.  You would be able to see how
+much of C<main>'s running time was due to time spent computing in
+C<suba> and C<subb>.  If that was just a little time, you would know
+that optimizing or improving C<suba> and C<subb> would not have a
+large effect on the performance of C<main>.  But if there was a big
+difference, you would know that C<suba> or C<subb> was a good
+candidate for optimization if you needed to make C<main> go faster.
+
+=item * 
+
+Maybe a tied-hash interface to the memo-table, which a hook to
+      automatically populate an entry if no value is there yet?
+
+=item * 
+
+Perhaps C<memoize> should return a reference to the original function
+as well as one to the memoized version?  But the programmer could
+always construct such a reference themselves, so perhaps it's not
+necessary.  We save such a reference anyway, so a new package method
+could return it on demand even if it wasn't provided by C<memoize>.
+We could even bless the new function reference so that it could have
+accessor methods for getting to the original function, the options,
+the memo table, etc.
+
+=item *
+
+The TODISK feature is not ready yet.  It will have to be rather
+complicated, providing options for which disk method to use (GDBM?
+DB_File?  Flat file?  Storable?  User-supplied?) and which stringizing
+method to use (FreezeThaw?  Marshal?  User-supplied?)
+
+=item *
+
+Maybe an option for automatic expiration of cache values?  (`After one
+day,' `After five uses,' etc.)  
+
+=item *
+
+Put in a better example than C<fibo>.  Show an example of a
+nonrecursive function that simply takes a long time to run.
+C<getpwuid> for example?  But this exposes the bug that you can't say
+C<memoize('getpwuid')>, so perhaps it's not a very good example.
+
+Well, I did add the ColorToRGB example, but it's still not so good.
+These examples need a lot of work.  C<factorial> might be a better
+example than C<fibo>.  
+
+=item * 
+
+There was probably some other stuff that I forgot.
+
+
+
+=back

@@ -3,7 +3,7 @@
 use lib '..';
 use Memoize;
 
-print "1..22\n";
+print "1..25\n";
 
 print "Basic\n";
 
@@ -110,6 +110,20 @@ $n++;
 print (("@f2r" eq "1 1 1 1 1 1 1 1 1 1") ? "ok $n\n" : "not ok $n\n");
 $n++;
 print (("@f3r" eq "1 1 1 1 1 1 1 1 1 1") ? "ok $n\n" : "not ok $n\n");
+
+print "INSTALL => undef option.\n";
+{ my $i = 1;
+  sub u1 { $i++ }
+}
+my $um = memoize('u1', {INSTALL => undef});
+@umr = (&$um, &$um, &$um);
+@u1r = (&u1,  &u1,  &u1 );	# Did *not* clobber &u1
+$n++;
+print (("@umr" eq "1 1 1") ? "ok $n\n" : "not ok $n\n"); # Increment once
+$n++;
+print (("@u1r" eq "2 3 4") ? "ok $n\n" : "not ok $n\n"); # Increment thrice
+$n++;
+print ((defined &{"undef"}) ? "not ok $n\n" : "ok $n\n"); # Just in case
 
 print "$n tests in all.\n";
 
