@@ -7,8 +7,6 @@
 # You may copy and distribute this program under the
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize+@plover.com for a license.
-#
-# Version 1.01 $Revision: 1.18 $ $Date: 2001/06/24 17:16:47 $
 
 package Memoize;
 $VERSION = '1.01_03';
