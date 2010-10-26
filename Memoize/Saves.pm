@@ -171,7 +171,7 @@ You can use the HASH option to string multiple Memoize Plug-ins together:
 =head1 CAVEATS
 
 This module is experimental, and may contain bugs.  Please report bugs
-to C<mjd-perl-memoize+@plover.com>.
+to C<bug-Memoize@rt.perl.org>.
 
 If you are going to use Memoize::Saves with Memoize::Expire it is
 important to use it in that order.  Memoize::Expire changes the return
