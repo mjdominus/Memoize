@@ -311,10 +311,10 @@ the underlying cache so that the user can specify that the cache is
 also persistent or that it has some other interesting semantics.  The
 example above demonstrates how to do this, as does C<Memoize::Expire>.
 
-Another sample module, C<Memoize::Saves>, is included with this
-package.  It implements a policy that allows you to specify that
-certain function values would always be looked up afresh.  See the
-documentation for details.
+Another sample module, L<Memoize::Saves>, is available in a separate
+distribution on CPAN.  It implements a policy that allows you to
+specify that certain function values would always be looked up afresh.
+See the documentation for details.
 
 =head1 ALTERNATIVES
 
