@@ -9,7 +9,7 @@
 # write to mjd-perl-memoize+@plover.com for a license.
 
 package Memoize;
-$VERSION = '1.02';
+$VERSION = '1.03';
 
 # Compile-time constants
 sub SCALAR () { 0 } 
@@ -353,7 +353,7 @@ Memoize - Make functions faster by trading space for time
 
 =head1 SYNOPSIS
 
-        # This is the documentation for Memoize 1.02
+        # This is the documentation for Memoize 1.03
 	use Memoize;
 	memoize('slow_function');
 	slow_function(arguments);    # Is faster than it was before
