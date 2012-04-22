@@ -3,7 +3,7 @@
 #
 # Transparent memoization of idempotent functions
 #
-# Copyright 1998, 1999, 2000, 2001 M-J. Dominus.
+# Copyright 1998, 1999, 2000, 2001, 2012 M. J. Dominus.
 # You may copy and distribute this program under the
 # same terms as Perl itself.  If in doubt, 
 # write to mjd-perl-memoize+@plover.com for a license.
@@ -645,7 +645,7 @@ the following four strings:
 	MERGE
         HASH
 
-or else it must be a reference to a list whose first element is one of
+or else it must be a reference to an array whose first element is one of
 these four strings, such as C<[HASH, arguments...]>.
 
 =over 4
@@ -683,21 +683,24 @@ runs in the background and populates the cache file.  Then when you
 come to run your real program the memoized function will be fast
 because all its results have been precomputed.
 
+Another reason to use C<HASH> is to provide your own hash variable.
+You can then inspect or modify the contents of the hash to gain finer
+control over the cache management.
+
 =item C<TIE>
 
 This option is no longer supported.  It is still documented only to
 aid in the debugging of old programs that use it.  Old programs should
 be converted to use the C<HASH> option instead.
 
-        memoize ... [TIE, PACKAGE, ARGS...]
+        memoize ... ['TIE', PACKAGE, ARGS...]
 
 is merely a shortcut for
 
         require PACKAGE;
-	{ my %cache;
-          tie %cache, PACKAGE, ARGS...;
-	}
-        memoize ... [HASH => \%cache];
+	{ tie my %cache, PACKAGE, ARGS...;
+          memoize ... [HASH => \%cache];
+        }
 
 =item C<FAULT>
 
@@ -1018,36 +1021,37 @@ C<Memoize>, send an empty note to C<mjd-perl-memoize-request@plover.com>.
 
 Mark-Jason Dominus (C<mjd-perl-memoize+@plover.com>), Plover Systems co.
 
-See the C<Memoize.pm> Page at http://www.plover.com/~mjd/perl/Memoize/
+See the C<Memoize.pm> Page at http://perl.plover.com/Memoize/
 for news and upgrades.  Near this page, at
-http://www.plover.com/~mjd/perl/MiniMemoize/ there is an article about
+http://perl.plover.com/MiniMemoize/ there is an article about
 memoization and about the internals of Memoize that appeared in The
 Perl Journal, issue #13.  (This article is also included in the
 Memoize distribution as `article.html'.)
 
-The author's book I<Higher Order Perl> (2005, ISBN 1558607013, published
-by Morgan Kaufmann) discusses memoization (and many other fascinating
-topics) in tremendous detail. It will also be available on-line for free.
-For more information, visit http://perl.plover.com/book/ .
+The author's book I<Higher-Order Perl> (2005, ISBN 1558607013, published
+by Morgan Kaufmann) discusses memoization (and many other 
+topics) in tremendous detail. It is available on-line for free.
+For more information, visit http://hop.perl.plover.com/ .
 
 To join a mailing list for announcements about C<Memoize>, send an
 empty message to C<mjd-perl-memoize-request@plover.com>.  This mailing
-list is for announcements only and has extremely low traffic---about
+list is for announcements only and has extremely low traffic---fewer than
 two messages per year.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 1998, 1999, 2000, 2001  by Mark Jason Dominus
+Copyright 1998, 1999, 2000, 2001, 2012  by Mark Jason Dominus
 
 This library is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.
 
 =head1 THANK YOU
 
-Many thanks to John Tromp for bug reports, Jonathan Roy for bug
-reports and suggestions, to Michael Schwern for other bug reports and
-patches, to Mike Cariaso for helping me to figure out the Right Thing
-to Do About Expiration, to Joshua Gerth, Joshua Chamas, Jonathan Roy
+Many thanks to Florian Ragwitz for administration and packaging
+assistance, to John Tromp for bug reports, to Jonathan Roy for bug reports
+and suggestions, to Michael Schwern for other bug reports and patches,
+to Mike Cariaso for helping me to figure out the Right Thing to Do
+About Expiration, to Joshua Gerth, Joshua Chamas, Jonathan Roy
 (again), Mark D. Anderson, and Andrew Johnson for more suggestions
 about expiration, to Brent Powers for the Memoize::ExpireLRU module,
 to Ariel Scolnicov for delightful messages about the Fibonacci
