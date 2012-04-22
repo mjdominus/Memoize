@@ -132,10 +132,9 @@ sub memoize {
   # Perhaps I should check here that you didn't supply *both* merge
   # options.  But if you did, it does do something reasonable: They
   # both get merged to the same in-memory hash.
-  if ($options{SCALAR_CACHE} eq 'MERGE') {
+  if ($options{SCALAR_CACHE} eq 'MERGE' || $options{LIST_CACHE} eq 'MERGE') {
+    $options{MERGED} = 1;
     $caches{SCALAR} = $caches{LIST};
-  } elsif ($options{LIST_CACHE} eq 'MERGE') {
-    $caches{LIST} = $caches{SCALAR};
   }
 
   # Now deal with the TIE options
@@ -240,11 +239,12 @@ sub _memoizer {
     my $cache = $info->{S};
     _crap_out($info->{NAME}, 'scalar') unless $cache;
     if (exists $cache->{$argstr}) { 
-      return $cache->{$argstr};
+      return $info->{O}{MERGED}
+        ? $cache->{$argstr}[0] : $cache->{$argstr};
     } else {
       my $val = &{$info->{U}}(@_);
       # Scalars are considered to be lists; store appropriately
-      if ($info->{O}{SCALAR_CACHE} eq 'MERGE') {
+      if ($info->{O}{MERGED}) {
 	$cache->{$argstr} = [$val];
       } else {
 	$cache->{$argstr} = $val;
@@ -255,17 +255,10 @@ sub _memoizer {
     my $cache = $info->{L};
     _crap_out($info->{NAME}, 'list') unless $cache;
     if (exists $cache->{$argstr}) {
-      my $val = $cache->{$argstr};
-      # If LISTCONTEXT=>MERGE, then the function never returns lists,
-      # so we have a scalar value cached, so just return it straightaway:
-      return ($val) if $info->{O}{LIST_CACHE} eq 'MERGE';
-      # Maybe in a later version we can use a faster test.
-
-      # Otherwise, we cached an array containing the returned list:
-      return @$val;
+      return @{$cache->{$argstr}};
     } else {
       my @q = &{$info->{U}}(@_);
-      $cache->{$argstr} = $info->{O}{LIST_CACHE} eq 'MERGE' ? $q [0] : \@q;
+      $cache->{$argstr} = \@q;
       @q;
     }
   } else {
@@ -717,35 +710,66 @@ should abort the program.  The error message is one of
 
 =item C<MERGE>
 
-C<MERGE> normally means the function does not distinguish between list
-and sclar context, and that return values in both contexts should be
-stored together.  C<LIST_CACHE =E<gt> MERGE> means that list context
-return values should be stored in the same hash that is used for
-scalar context returns, and C<SCALAR_CACHE =E<gt> MERGE> means the
-same, mutatis mutandis.  It is an error to specify C<MERGE> for both,
-but it probably does something useful.
+C<MERGE> normally means that the memoized function does not
+distinguish between list and sclar context, and that return values in
+both contexts should be stored together.  Both C<LIST_CACHE =E<gt>
+MERGE> and C<SCALAR_CACHE =E<gt> MERGE> mean the same thing.
 
 Consider this function:
 
-	sub pi { 3; }
+	sub complicated {
+          # ... time-consuming calculation of $result
+          return $result;
+        }
 
-Normally, the following code will result in two calls to C<pi>:
+The C<complicated> function will return the same numeric C<$result>
+regardless of whether it is called in list or in scalar context.
 
-    $x = pi();
-    ($y) = pi();
-    $z = pi();
+Normally, the following code will result in two calls to C<complicated>, even
+if C<complicated> is memoized:
 
-The first call caches the value C<3> in the scalar cache; the second
-caches the list C<(3)> in the list cache.  The third call doesn't call
-the real C<pi> function; it gets the value from the scalar cache.
+    $x = complicated(142);
+    ($y) = complicated(142);
+    $z = complicated(142);
 
-Obviously, the second call to C<pi> is a waste of time, and storing
-its return value is a waste of space.  Specifying C<LIST_CACHE =E<gt>
-MERGE> will make C<memoize> use the same cache for scalar and list
-context return values, so that the second call uses the scalar cache
-that was populated by the first call.  C<pi> ends up being called only
-once, and both subsequent calls return C<3> from the cache, regardless
-of the calling context.
+The first call will cache the result, say 37, in the scalar cache; the
+second will cach the list C<(37)> in the list cache.  The third call
+doesn't call the real C<complicated> function; it gets the value 37
+from the scalar cache.
+
+Obviously, the second call to C<complicated> is a waste of time, and
+storing its return value is a waste of space.  Specifying C<LIST_CACHE
+=E<gt> MERGE> will make C<memoize> use the same cache for scalar and
+list context return values, so that the second call uses the scalar
+cache that was populated by the first call.  C<complicated> ends up
+being called only once, and both subsequent calls return C<3> from the
+cache, regardless of the calling context.
+
+=head3 List values in scalar context
+
+Consider this function:
+
+    sub iota { return reverse (1..$_[0]) }
+
+This function normally returns a list.  Suppose you memoize it and
+merge the caches:
+
+    memoize 'iota', SCALAR_CACHE => 'MERGE';
+
+    @i7 = iota(7);
+    $i7 = iota(7);
+
+Here the first call caches the list (1,2,3,4,5,6,7).  The second call
+does not really make sense. C<Memoize> cannot guess what behavior
+C<iota> should have in scalar context without actually calling it in
+scalar context.  Normally C<Memoize> I<would> call C<iota> in scalar
+context and cache the result, but the C<SCALAR_CACHE =E<gt> 'MERGE'>
+option says not to do that, but to use the cache list-context value
+instead. But it cannot return a list of seven elements in a scalar
+context. In this case C<$i7> will receive the B<first element> of the
+cached list value, namely 7.
+
+=head3 Merged disk caches
 
 Another use for C<MERGE> is when you want both kinds of return values
 stored in the same disk file; this saves you from having to deal with
@@ -757,7 +781,7 @@ keep the two sets of return values separate.  For example:
 	memoize 'myfunc',
 	  NORMALIZER => 'n',
 	  SCALAR_CACHE => [HASH => \%cache],
-	  LIST_CACHE => MERGE,
+	  LIST_CACHE => 'MERGE',
 	;
 
 	sub n {
@@ -1020,23 +1044,23 @@ it under the same terms as Perl itself.
 
 =head1 THANK YOU
 
-Many thanks to Jonathan Roy for bug reports and suggestions, to
-Michael Schwern for other bug reports and patches, to Mike Cariaso for
-helping me to figure out the Right Thing to Do About Expiration, to
-Joshua Gerth, Joshua Chamas, Jonathan Roy (again), Mark D. Anderson,
-and Andrew Johnson for more suggestions about expiration, to Brent
-Powers for the Memoize::ExpireLRU module, to Ariel Scolnicov for
-delightful messages about the Fibonacci function, to Dion Almaer for
-thought-provoking suggestions about the default normalizer, to Walt
-Mankowski and Kurt Starsinic for much help investigating problems
-under threaded Perl, to Alex Dudkevich for reporting the bug in
-prototyped functions and for checking my patch, to Tony Bass for many
-helpful suggestions, to Jonathan Roy (again) for finding a use for
-C<unmemoize()>, to Philippe Verdret for enlightening discussion of
-C<Hook::PrePostCall>, to Nat Torkington for advice I ignored, to Chris
-Nandor for portability advice, to Randal Schwartz for suggesting the
-'C<flush_cache> function, and to Jenda Krynicky for being a light in
-the world.
+Many thanks to John Tromp for bug reports, Jonathan Roy for bug
+reports and suggestions, to Michael Schwern for other bug reports and
+patches, to Mike Cariaso for helping me to figure out the Right Thing
+to Do About Expiration, to Joshua Gerth, Joshua Chamas, Jonathan Roy
+(again), Mark D. Anderson, and Andrew Johnson for more suggestions
+about expiration, to Brent Powers for the Memoize::ExpireLRU module,
+to Ariel Scolnicov for delightful messages about the Fibonacci
+function, to Dion Almaer for thought-provoking suggestions about the
+default normalizer, to Walt Mankowski and Kurt Starsinic for much help
+investigating problems under threaded Perl, to Alex Dudkevich for
+reporting the bug in prototyped functions and for checking my patch,
+to Tony Bass for many helpful suggestions, to Jonathan Roy (again) for
+finding a use for C<unmemoize()>, to Philippe Verdret for enlightening
+discussion of C<Hook::PrePostCall>, to Nat Torkington for advice I
+ignored, to Chris Nandor for portability advice, to Randal Schwartz
+for suggesting the 'C<flush_cache> function, and to Jenda Krynicky for
+being a light in the world.
 
 Special thanks to Jarkko Hietaniemi, the 5.8.0 pumpking, for including
 this module in the core and for his patient and helpful guidance
