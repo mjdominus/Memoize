@@ -47,6 +47,10 @@ WriteMakefile(
   VERSION_FROM  => 'Memoize.pm',
   LICENSE       => 'perl',
   ABSTRACT_FROM => 'Memoize.pm',
+
+  # See https://rt.cpan.org/Ticket/Display.html?id=57201
+  INSTALLDIRS   => ( $] >= 5.009005 && $] <= 5.011000 ? 'perl' : 'site' ),
+
   META_ADD => {
     resources => {
       homepage   => 'https://github.com/mjdominus/Memoize',
@@ -65,7 +69,3 @@ WriteMakefile(
   dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
   clean => { FILES => 'Memoize-*.tar.gz' },
 );
-
-
-
-
