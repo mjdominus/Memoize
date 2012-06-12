@@ -312,8 +312,8 @@ sub unmemoize {
     local($^W) = 0;	       # ``Subroutine $install_name redefined at ...''
     *{$name} = $tabent->{U}; # Replace with original function
   }
-  undef $memotable{$revmemotable{$cref}};
-  undef $revmemotable{$cref};
+  delete $memotable{$revmemotable{$cref}};
+  delete $revmemotable{$cref};
 
   # This removes the last reference to the (possibly tied) memo tables
   # my ($old_function, $memotabs) = @{$tabent}{'U','S','L'};

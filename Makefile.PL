@@ -50,6 +50,10 @@ WriteMakefile(
 
   # See https://rt.cpan.org/Ticket/Display.html?id=57201
   INSTALLDIRS   => ( $] >= 5.009005 && $] <= 5.011000 ? 'perl' : 'site' ),
+  
+  BUILD_REQUIRES => {
+    'Test::LeakTrace' => 0,
+  },
 
   META_ADD => {
     resources => {
