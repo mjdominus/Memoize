@@ -26,6 +26,7 @@ use Carp;
 use Exporter;
 use vars qw($DEBUG);
 use Config;                     # Dammit.
+use Scalar::Util 'blessed';
 @ISA = qw(Exporter);
 @EXPORT = qw(memoize);
 @EXPORT_OK = qw(unmemoize flush_cache);
@@ -113,6 +114,10 @@ sub memoize {
     }
     if ($cache_opt eq 'FAULT') { # no cache
       $caches{$context} = undef;
+    } 
+    # cache in the instance in which the method is invoked
+    elsif($cache_opt eq 'IN_OBJECT') { 
+      $caches{$context} = 'IN_OBJECT';
     } elsif ($cache_opt eq 'HASH') { # user-supplied hash
       my $cache = $cache_opt_args[0];
       my $package = ref(tied %$cache);
@@ -221,6 +226,15 @@ sub _memoizer {
   my $argstr;
   my $context = (wantarray() ? LIST : SCALAR);
 
+  # If we are memoizing in the object itself, then don't include
+  # Object reference in argstring.
+  my $store_in_object = 1 if (
+    $context == SCALAR and $info->{S} eq 'IN_OBJECT'
+  ) or (
+    $context == LIST   and $info->{L} eq 'IN_OBJECT'
+  );
+  my $object = shift() if $store_in_object;
+
   if (defined $normalizer) { 
     no strict;
     if ($context == SCALAR) {
@@ -235,8 +249,16 @@ sub _memoizer {
     $argstr = join chr(28),@_;  
   }
 
+  # Put object back in @_, 'cause we still need to pass it to method
+  unshift(@_, $object) if $store_in_object;
+  
   if ($context == SCALAR) {
-    my $cache = $info->{S};
+    my $cache = $info->{S} || '';
+    if ($cache eq 'IN_OBJECT') {
+      croak "Method $info->{NAME} was memoized with SCALAR_CACHE => 'IN_OBJECT', which means that the method must always be called on an object"
+        unless ( $object and blessed($object) );
+      $cache = $object->{'_Memoize::SCALAR_CACHE'} ||= {}
+    }  
     _crap_out($info->{NAME}, 'scalar') unless $cache;
     if (exists $cache->{$argstr}) { 
       return $info->{O}{MERGED}
@@ -252,7 +274,12 @@ sub _memoizer {
       $val;
     }
   } elsif ($context == LIST) {
-    my $cache = $info->{L};
+    my $cache = $info->{L} || '';
+    if ($cache eq 'IN_OBJECT') {
+      croak "Method $info->{NAME} was memoized with SCALAR_CACHE => 'IN_OBJECT', which means that the method must always be called on an object"
+        unless ( $object and blessed($object) );
+      $cache = $object->{'_Memoize::LIST_CACHE'} ||= {}
+    }  
     _crap_out($info->{NAME}, 'list') unless $cache;
     if (exists $cache->{$argstr}) {
       return @{$cache->{$argstr}};
