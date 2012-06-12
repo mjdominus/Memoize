@@ -42,10 +42,28 @@ use ExtUtils::MakeMaker;
 # }
 
 WriteMakefile(
-	      NAME => 'Memoize',
-	      VERSION_FROM => 'Memoize.pm',
-#	      'linkext' => {LINKTYPE => ''},
-	      'dist' => {COMPRESS => 'gzip', SUFFIX => 'gz'},
+  NAME          => 'Memoize',
+  AUTHOR        => 'Mark-Jason Dominus (mjd-perl-memoize+@plover.com), Plover Systems co.',
+  VERSION_FROM  => 'Memoize.pm',
+  LICENSE       => 'perl',
+  ABSTRACT_FROM => 'Memoize.pm',
+  META_ADD => {
+    resources => {
+      homepage   => 'https://github.com/mjdominus/Memoize',
+      IRC        => 'irc://irc.perl.org/#p5p',
+      license    => 'http://dev.perl.org/licenses/',
+      repository => {
+         url  => 'git://github.com/mjdominus/Memoize.git',
+         web  => 'https://github.com/mjdominus/Memoize',
+         type => 'git',
+      },
+      bugtracker => {
+         web    => 'https://github.com/mjdominus/Memoize/issues?state=open',
+      },
+    },
+  },
+  dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+  clean => { FILES => 'Memoize-*.tar.gz' },
 );
 
 
